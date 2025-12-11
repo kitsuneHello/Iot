@@ -29,7 +29,45 @@ app.get('/api/congestion', (req, res) => {
         res.json(results);
     });
 });
-
+// 最新の混雑度（各階）
+app.get('/api/congestion/latest', (req, res) => {
+    db.query(`SELECT d.floor_number, c.congestion_level, c.measured_at FROM congestion_logs c
+        JOIN devices d ON c.device_id = d.device_id
+        WHERE d.location_type = 'HALL'
+        AND c.measured_at = (SELECT MAX(measured_at) FROM congestion_logs WHERE device_id = c.device_id)
+        ORDER BY d.floor_number`, (err, results) => {
+        if (err) return res.status(500).send('DB Error');
+        res.json(results);
+    });
+});
+// 最新のエレベーター環境
+app.get('/api/environment/latest', (req, res) => {
+    db.query(`SELECT device_id, co2_ppm, temperature, humidity, measured_at FROM environment_logs
+        WHERE measured_at = (SELECT MAX(measured_at) FROM environment_logs WHERE device_id = environment_logs.device_id)
+        ORDER BY device_id`, (err, results) => {
+        if (err) return res.status(500).send('DB Error');
+        res.json(results);
+    });
+});
+// 最新の混雑RTT指標（例: 直近1タームの総和）
+app.get('/api/rtt/latest', (req, res) => {
+    db.query(`SELECT SUM(congestion_level) AS value FROM congestion_logs
+        WHERE measured_at >= (SELECT MAX(start_time) FROM elevator_trips)
+        AND measured_at <= (SELECT MAX(end_time) FROM elevator_trips)`, (err, results) => {
+        if (err) return res.status(500).send('DB Error');
+        res.json({ value: results[0]?.value || 0 });
+    });
+});
+// 過去データ（混雑度・環境）
+app.get('/api/history', (req, res) => {
+    db.query(`SELECT d.floor_number, c.device_id, c.congestion_level, c.measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id
+        UNION ALL
+        SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.co2_ppm, e.temperature, e.humidity FROM environment_logs e
+        ORDER BY measured_at DESC LIMIT 100`, (err, results) => {
+        if (err) return res.status(500).send('DB Error');
+        res.json(results);
+    });
+});
 // Web画面
 app.use(express.static('web'));
 

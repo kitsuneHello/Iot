@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>エレベーター管理システム</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+
+        h2 {
+            margin-top: 30px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        .realtime {
+            display: flex;
+            gap: 40px;
+        }
+
+        .realtime>div {
+            flex: 1;
+        }
+
+        .download-btn {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>エレベーター管理システム</h1>
+    <h2>リアルタイム情報</h2>
+    <div class="realtime">
+        <div>
+            <h3>各階の最新混雑度</h3>
+            <table id="congestion-table">
+                <thead>
+                    <tr>
+                        <th>階</th>
+                        <th>混雑度</th>
+                        <th>時刻</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div>
+            <h3>最新エレベーター環境</h3>
+            <table id="env-table">
+                <thead>
+                    <tr>
+                        <th>デバイス</th>
+                        <th>CO₂</th>
+                        <th>温度</th>
+                        <th>湿度</th>
+                        <th>時刻</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div>
+            <h3>最新混雑RTT指標</h3>
+            <div id="rtt-value">取得中...</div>
+        </div>
+    </div>
+
+    <h2>過去データ</h2>
+    <div>
+        <button class="download-btn" onclick="downloadCSV()">CSVダウンロード</button>
+        <canvas id="historyChart" height="120"></canvas>
+        <table id="history-table">
+            <thead>
+                <tr>
+                    <th>階/デバイス</th>
+                    <th>混雑度</th>
+                    <th>CO₂</th>
+                    <th>温度</th>
+                    <th>湿度</th>
+                    <th>時刻</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        // リアルタイムデータ取得
+        async function fetchRealtime() {
+            const [congestion, env, rtt] = await Promise.all([
+                fetch('/api/congestion/latest').then(r => r.json()),
+                fetch('/api/environment/latest').then(r => r.json()),
+                fetch('/api/rtt/latest').then(r => r.json())
+            ]);
+            // 混雑度
+            const ct = document.querySelector('#congestion-table tbody');
+            ct.innerHTML = congestion.map(row => `<tr><td>${row.floor_number}</td><td>${row.congestion_level}</td><td>${row.measured_at}</td></tr>`).join('');
+            // 環境
+            const et = document.querySelector('#env-table tbody');
+            et.innerHTML = env.map(row => `<tr><td>${row.device_id}</td><td>${row.co2_ppm}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
+            // RTT
+            document.getElementById('rtt-value').textContent = rtt.value;
+        }
+        // 過去データ取得
+        async function fetchHistory() {
+            const data = await fetch('/api/history').then(r => r.json());
+            // 表
+            const ht = document.querySelector('#history-table tbody');
+            ht.innerHTML = data.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.co2_ppm || ''}</td><td>${row.temperature || ''}</td><td>${row.humidity || ''}</td><td>${row.measured_at}</td></tr>`).join('');
+            // グラフ
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            const chartData = {
+                labels: data.map(r => r.measured_at),
+                datasets: [
+                    { label: '混雑度', data: data.map(r => r.congestion_level || null), borderColor: 'blue', fill: false },
+                    { label: 'CO₂', data: data.map(r => r.co2_ppm || null), borderColor: 'green', fill: false },
+                    { label: '温度', data: data.map(r => r.temperature || null), borderColor: 'red', fill: false },
+                    { label: '湿度', data: data.map(r => r.humidity || null), borderColor: 'orange', fill: false }
+                ]
+            };
+            if (window.historyChartObj) window.historyChartObj.destroy();
+            window.historyChartObj = new Chart(ctx, { type: 'line', data: chartData });
+        }
+        // CSVダウンロード
+        async function downloadCSV() {
+            const data = await fetch('/api/history').then(r => r.json());
+            let csv = '階/デバイス,混雑度,CO₂,温度,湿度,時刻\n';
+            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.co2_ppm || ''},${row.temperature || ''},${row.humidity || ''},${row.measured_at}`).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'history.csv';
+            a.click();
+        }
+        // 初期ロード
+        fetchRealtime();
+        fetchHistory();
+        setInterval(fetchRealtime, 5000);
+    </script>
+</body>
+
+</html>
