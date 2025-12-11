@@ -2,7 +2,7 @@ const express = require('express');
 const mqtt = require('mqtt');
 const mysql = require('mysql2');
 const app = express();
-const port = 80;
+const port = 3000;
 
 // MySQL接続
 const db = mysql.createConnection({
