@@ -32,11 +32,19 @@ app.get('/api/congestion', (req, res) => {
 
 // 最新の混雑度（各階）
 app.get('/api/congestion/latest', (req, res) => {
-    db.query(`SELECT d.floor_number, c.congestion_level, c.measured_at FROM congestion_logs c
-        JOIN devices d ON c.device_id = d.device_id
-        WHERE d.location_type = 'HALL'
-        AND c.measured_at = (SELECT MAX(measured_at) FROM congestion_logs WHERE device_id = c.device_id)
-        ORDER BY d.floor_number`, (err, results) => {
+    db.query(`SELECT floor_number, congestion_level, measured_at
+        FROM (
+          SELECT
+            d.floor_number,
+            c.congestion_level,
+            c.measured_at,
+            ROW_NUMBER() OVER (PARTITION BY c.device_id ORDER BY c.measured_at DESC) as rn
+          FROM congestion_logs c
+          JOIN devices d ON c.device_id = d.device_id
+          WHERE d.location_type = 'HALL'
+        ) t
+        WHERE t.rn = 1
+        ORDER BY floor_number`, (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json(results);
     });
