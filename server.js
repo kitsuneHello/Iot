@@ -91,7 +91,12 @@ app.get('/api/history', (req, res) => {
     }
     let sql = '';
     if (type === 'congestion') {
-        sql = `SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY d.floor_number, c.device_id, measured_at ORDER BY measured_at DESC LIMIT ? OFFSET ?`;
+        sql = `SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at
+FROM congestion_logs c
+JOIN devices d ON c.device_id = d.device_id
+GROUP BY c.device_id, measured_at
+ORDER BY measured_at DESC
+LIMIT ? OFFSET ?`;
     } else if (type === 'environment') {
         sql = `SELECT e.device_id, e.co2_ppm, e.temperature, e.humidity, e.measured_at FROM environment_logs e ${where} ORDER BY e.measured_at DESC LIMIT ? OFFSET ?`;
     } else if (type === 'accident') {
