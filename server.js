@@ -62,12 +62,31 @@ app.get('/api/rtt/latest', (req, res) => {
     });
 });
 
-// 過去データ（混雑度・環境）
+// 過去データ（混雑度・環境・RTT）
 app.get('/api/history', (req, res) => {
-    db.query(`SELECT d.floor_number, c.device_id, c.congestion_level, c.measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id
-        UNION ALL
-        SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.co2_ppm, e.temperature, e.humidity FROM environment_logs e
-        ORDER BY measured_at DESC LIMIT 100`, (err, results) => {
+    let { range, date } = req.query;
+    let where = '';
+    let params = [];
+    if (range && date) {
+        if (range === 'day') {
+            where = 'WHERE DATE(c.measured_at) = ?';
+            params.push(date);
+        } else if (range === 'week') {
+            where = 'WHERE YEARWEEK(c.measured_at, 1) = YEARWEEK(?, 1)';
+            params.push(date);
+        } else if (range === 'month') {
+            where = 'WHERE DATE_FORMAT(c.measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            params.push(date);
+        }
+    }
+    // 混雑度
+    const congestionSql = `SELECT d.floor_number, c.device_id, c.congestion_level, c.measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, NULL AS rtt_value FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where}`;
+    // 環境
+    const envSql = `SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.co2_ppm, e.temperature, e.humidity, NULL AS rtt_value FROM environment_logs e ${where.replace(/c\./g, 'e.')}`;
+    // RTT（1タームごと）
+    const rttSql = `SELECT NULL AS floor_number, NULL AS device_id, NULL AS congestion_level, t.end_time AS measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, SUM(c.congestion_level) AS rtt_value FROM elevator_trips t LEFT JOIN congestion_logs c ON c.measured_at BETWEEN t.start_time AND t.end_time ${where.replace(/c\./g, 'c.').replace(/e\./g, 'c.')} GROUP BY t.id`;
+    // 3つまとめて
+    db.query(congestionSql + ' UNION ALL ' + envSql + ' UNION ALL ' + rttSql + ' ORDER BY measured_at DESC LIMIT 200', [...params, ...params, ...params], (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json(results);
     });
