@@ -107,6 +107,21 @@
                 <h4>湿度</h4>
                 <canvas id="humChart" height="100"></canvas>
             </div>
+            <div style="flex:1; min-width:300px;">
+                <h4>RTT指標</h4>
+                <canvas id="rttChart" height="100"></canvas>
+            </div>
+        </div>
+        <div style="margin: 10px 0;">
+            <label>表示範囲:
+                <select id="rangeSelect" onchange="fetchHistory()">
+                    <option value="day">日</option>
+                    <option value="week">週</option>
+                    <option value="month">月</option>
+                    <option value="all">全期間</option>
+                </select>
+                <input type="date" id="dateInput" value="" onchange="fetchHistory()">
+            </label>
         </div>
         <table id="history-table">
             <thead>
@@ -142,16 +157,58 @@
         }
         // 過去データ取得
         async function fetchHistory() {
-            const data = await fetch('/api/history').then(r => r.json());
+            // 範囲取得
+            const range = document.getElementById('rangeSelect').value;
+            const date = document.getElementById('dateInput').value;
+            let url = '/api/history';
+            if (range && date) {
+                url += `?range=${range}&date=${date}`;
+            }
+            const data = await fetch(url).then(r => r.json());
             // 表
             const ht = document.querySelector('#history-table tbody');
             ht.innerHTML = data.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.co2_ppm || ''}</td><td>${row.temperature || ''}</td><td>${row.humidity || ''}</td><td>${row.measured_at}</td></tr>`).join('');
             // データ分割
-            const congestion = data.filter(r => r.congestion_level !== null && r.congestion_level !== undefined);
+            // 階ごと混雑度
+            const congestionByFloor = {};
+            data.filter(r => r.congestion_level !== null && r.congestion_level !== undefined && r.floor_number !== null && r.floor_number !== undefined)
+                .forEach(r => {
+                    if (!congestionByFloor[r.floor_number]) congestionByFloor[r.floor_number] = [];
+                    congestionByFloor[r.floor_number].push(r);
+                });
+            // CO2, temp, hum, RTT
             const co2 = data.filter(r => r.co2_ppm !== null && r.co2_ppm !== undefined);
             const temp = data.filter(r => r.temperature !== null && r.temperature !== undefined);
             const hum = data.filter(r => r.humidity !== null && r.humidity !== undefined);
+            const rtt = data.filter(r => r.rtt_value !== null && r.rtt_value !== undefined);
             // グラフ
+            // 混雑度: 階ごと
+            const ctxC = document.getElementById('congestionChart').getContext('2d');
+            if (ctxC._chart) ctxC._chart.destroy();
+            ctxC._chart = new Chart(ctxC, {
+                type: 'line',
+                data: {
+                    labels: data.map(r => r.measured_at),
+                    datasets: Object.keys(congestionByFloor).map(floor => ({
+                        label: `${floor}F`,
+                        data: congestionByFloor[floor].map(r => r.congestion_level),
+                        borderColor: ['blue', 'purple', 'navy', 'teal', 'aqua'][floor % 5],
+                        fill: false
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'minute', displayFormats: { minute: 'HH:mm:ss' } },
+                            ticks: { autoSkip: true, maxTicksLimit: 8 }
+                        }
+                    }
+                }
+            });
+            // CO2
             const makeChart = (ctx, label, arr, key, color) => {
                 if (!ctx) return;
                 if (ctx._chart) { ctx._chart.destroy(); }
@@ -167,23 +224,37 @@
                         scales: {
                             x: {
                                 type: 'time',
-                                time: {
-                                    unit: 'minute',
-                                    displayFormats: { minute: 'HH:mm:ss' }
-                                },
-                                ticks: {
-                                    autoSkip: true,
-                                    maxTicksLimit: 8
-                                }
+                                time: { unit: 'minute', displayFormats: { minute: 'HH:mm:ss' } },
+                                ticks: { autoSkip: true, maxTicksLimit: 8 }
                             }
                         }
                     }
                 });
             };
-            makeChart(document.getElementById('congestionChart').getContext('2d'), '混雑度', congestion, 'congestion_level', 'blue');
             makeChart(document.getElementById('co2Chart').getContext('2d'), 'CO₂', co2, 'co2_ppm', 'green');
             makeChart(document.getElementById('tempChart').getContext('2d'), '温度', temp, 'temperature', 'red');
             makeChart(document.getElementById('humChart').getContext('2d'), '湿度', hum, 'humidity', 'orange');
+            // RTT
+            const ctxR = document.getElementById('rttChart').getContext('2d');
+            if (ctxR._chart) ctxR._chart.destroy();
+            ctxR._chart = new Chart(ctxR, {
+                type: 'line',
+                data: {
+                    labels: rtt.map(r => r.measured_at),
+                    datasets: [{ label: 'RTT', data: rtt.map(r => r.rtt_value), borderColor: 'black', fill: false }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'minute', displayFormats: { minute: 'HH:mm:ss' } },
+                            ticks: { autoSkip: true, maxTicksLimit: 8 }
+                        }
+                    }
+                }
+            });
         }
         // CSVダウンロード
         async function downloadCSV() {
