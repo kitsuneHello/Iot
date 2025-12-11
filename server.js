@@ -51,6 +51,7 @@ mqttClient.on('message', (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
         if (topic === 'elevator/congestion') {
+            //混雑度を受信
             // { device_id, congestion_level, measured_at }
             db.query(
                 'INSERT INTO congestion_logs (device_id, congestion_level, measured_at) VALUES (?, ?, ?)',
@@ -58,6 +59,7 @@ mqttClient.on('message', (topic, message) => {
                 (err) => { if (err) console.error('DB insert error (congestion):', err); }
             );
         } else if (topic === 'elevator/environment') {
+            //環境データを受信
             // { device_id, co2_ppm, temperature, humidity, measured_at }
             db.query(
                 'INSERT INTO environment_logs (device_id, co2_ppm, temperature, humidity, measured_at) VALUES (?, ?, ?, ?, ?)',
@@ -65,6 +67,7 @@ mqttClient.on('message', (topic, message) => {
                 (err) => { if (err) console.error('DB insert error (environment):', err); }
             );
         } else if (topic === 'elevator/accident') {
+            //事故データを受信
             // { device_id, accident_type, occurred_at }
             db.query(
                 'INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
