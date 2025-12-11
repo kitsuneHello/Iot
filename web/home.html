@@ -89,7 +89,24 @@
     <h2>過去データ</h2>
     <div>
         <button class="download-btn" onclick="downloadCSV()">CSVダウンロード</button>
-        <canvas id="historyChart" height="120"></canvas>
+        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+            <div style="flex:1; min-width:300px;">
+                <h4>混雑度</h4>
+                <canvas id="congestionChart" height="100"></canvas>
+            </div>
+            <div style="flex:1; min-width:300px;">
+                <h4>CO₂</h4>
+                <canvas id="co2Chart" height="100"></canvas>
+            </div>
+            <div style="flex:1; min-width:300px;">
+                <h4>温度</h4>
+                <canvas id="tempChart" height="100"></canvas>
+            </div>
+            <div style="flex:1; min-width:300px;">
+                <h4>湿度</h4>
+                <canvas id="humChart" height="100"></canvas>
+            </div>
+        </div>
         <table id="history-table">
             <thead>
                 <tr>
@@ -128,19 +145,44 @@
             // 表
             const ht = document.querySelector('#history-table tbody');
             ht.innerHTML = data.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.co2_ppm || ''}</td><td>${row.temperature || ''}</td><td>${row.humidity || ''}</td><td>${row.measured_at}</td></tr>`).join('');
+            // データ分割
+            const congestion = data.filter(r => r.congestion_level !== null && r.congestion_level !== undefined);
+            const co2 = data.filter(r => r.co2_ppm !== null && r.co2_ppm !== undefined);
+            const temp = data.filter(r => r.temperature !== null && r.temperature !== undefined);
+            const hum = data.filter(r => r.humidity !== null && r.humidity !== undefined);
             // グラフ
-            const ctx = document.getElementById('historyChart').getContext('2d');
-            const chartData = {
-                labels: data.map(r => r.measured_at),
-                datasets: [
-                    { label: '混雑度', data: data.map(r => r.congestion_level || null), borderColor: 'blue', fill: false },
-                    { label: 'CO₂', data: data.map(r => r.co2_ppm || null), borderColor: 'green', fill: false },
-                    { label: '温度', data: data.map(r => r.temperature || null), borderColor: 'red', fill: false },
-                    { label: '湿度', data: data.map(r => r.humidity || null), borderColor: 'orange', fill: false }
-                ]
+            const makeChart = (ctx, label, arr, key, color) => {
+                if (!ctx) return;
+                if (ctx._chart) { ctx._chart.destroy(); }
+                ctx._chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: arr.map(r => r.measured_at),
+                        datasets: [{ label, data: arr.map(r => r[key]), borderColor: color, fill: false }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    unit: 'minute',
+                                    displayFormats: { minute: 'HH:mm:ss' }
+                                },
+                                ticks: {
+                                    autoSkip: true,
+                                    maxTicksLimit: 8
+                                }
+                            }
+                        }
+                    }
+                });
             };
-            if (window.historyChartObj) window.historyChartObj.destroy();
-            window.historyChartObj = new Chart(ctx, { type: 'line', data: chartData });
+            makeChart(document.getElementById('congestionChart').getContext('2d'), '混雑度', congestion, 'congestion_level', 'blue');
+            makeChart(document.getElementById('co2Chart').getContext('2d'), 'CO₂', co2, 'co2_ppm', 'green');
+            makeChart(document.getElementById('tempChart').getContext('2d'), '温度', temp, 'temperature', 'red');
+            makeChart(document.getElementById('humChart').getContext('2d'), '湿度', hum, 'humidity', 'orange');
         }
         // CSVダウンロード
         async function downloadCSV() {
