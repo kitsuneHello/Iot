@@ -62,33 +62,50 @@ app.get('/api/rtt/latest', (req, res) => {
     });
 });
 
-// 過去データ（混雑度・環境・RTT）
+// 過去データ（混雑度・環境・RTT・事故）
 app.get('/api/history', (req, res) => {
-    let { range, date } = req.query;
+    let { range, date, type = 'congestion', page = 1 } = req.query;
+    page = parseInt(page) || 1;
+    const pageSize = 30;
     let where = '';
     let params = [];
     if (range && date) {
         if (range === 'day') {
-            where = 'WHERE DATE(c.measured_at) = ?';
+            where = 'WHERE DATE(measured_at) = ?';
             params.push(date);
         } else if (range === 'week') {
-            where = 'WHERE YEARWEEK(c.measured_at, 1) = YEARWEEK(?, 1)';
+            where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
             params.push(date);
         } else if (range === 'month') {
-            where = 'WHERE DATE_FORMAT(c.measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
             params.push(date);
         }
     }
-    // 混雑度
-    const congestionSql = `SELECT d.floor_number, c.device_id, c.congestion_level, c.measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, NULL AS rtt_value FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where}`;
-    // 環境
-    const envSql = `SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.co2_ppm, e.temperature, e.humidity, NULL AS rtt_value FROM environment_logs e ${where.replace(/c\./g, 'e.')}`;
-    // RTT（1タームごと）
-    const rttSql = `SELECT NULL AS floor_number, NULL AS device_id, NULL AS congestion_level, t.end_time AS measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, SUM(c.congestion_level) AS rtt_value FROM elevator_trips t LEFT JOIN congestion_logs c ON c.measured_at BETWEEN t.start_time AND t.end_time ${where.replace(/c\./g, 'c.').replace(/e\./g, 'c.')} GROUP BY t.id`;
-    // 3つまとめて
-    db.query(congestionSql + ' UNION ALL ' + envSql + ' UNION ALL ' + rttSql + ' ORDER BY measured_at DESC LIMIT 200', [...params, ...params, ...params], (err, results) => {
+    let sql = '';
+    if (type === 'congestion') {
+        sql = `SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY d.floor_number, c.device_id, measured_at ORDER BY measured_at DESC LIMIT ? OFFSET ?`;
+    } else if (type === 'environment') {
+        sql = `SELECT e.device_id, e.co2_ppm, e.temperature, e.humidity, e.measured_at FROM environment_logs e ${where} ORDER BY e.measured_at DESC LIMIT ? OFFSET ?`;
+    } else if (type === 'accident') {
+        sql = `SELECT a.device_id, a.accident_type, a.occurred_at, a.is_resolved FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC LIMIT ? OFFSET ?`;
+    }
+    // 件数取得
+    let countSql = '';
+    if (type === 'congestion') {
+        countSql = `SELECT COUNT(*) AS cnt FROM (SELECT 1 FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY d.floor_number, c.device_id, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00')) t`;
+    } else if (type === 'environment') {
+        countSql = `SELECT COUNT(*) AS cnt FROM environment_logs e ${where}`;
+    } else if (type === 'accident') {
+        countSql = `SELECT COUNT(*) AS cnt FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')}`;
+    }
+    db.query(countSql, params, (err, countRes) => {
         if (err) return res.status(500).send('DB Error');
-        res.json(results);
+        const total = countRes[0].cnt;
+        const totalPages = Math.ceil(total / pageSize);
+        db.query(sql, [...params, pageSize, (page - 1) * pageSize], (err, results) => {
+            if (err) return res.status(500).send('DB Error');
+            res.json({ data: results, totalPages });
+        });
     });
 });
 

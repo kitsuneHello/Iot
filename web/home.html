@@ -122,20 +122,15 @@
                 </select>
                 <input type="date" id="dateInput" value="" onchange="fetchHistory()">
             </label>
+            <label style="margin-left:20px;">表示データ:
+                <select id="tableType" onchange="fetchHistory()">
+                    <option value="congestion">混雑度</option>
+                    <option value="environment">環境データ</option>
+                    <option value="accident">事故情報</option>
+                </select>
+            </label>
         </div>
-        <table id="history-table">
-            <thead>
-                <tr>
-                    <th>階/デバイス</th>
-                    <th>混雑度</th>
-                    <th>CO₂</th>
-                    <th>温度</th>
-                    <th>湿度</th>
-                    <th>時刻</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+        <div id="tableArea"></div>
     </div>
 
     <script>
@@ -156,105 +151,42 @@
             document.getElementById('rtt-value').textContent = rtt.value;
         }
         // 過去データ取得
-        async function fetchHistory() {
-            // 範囲取得
+        async function fetchHistory(page = 1) {
             const range = document.getElementById('rangeSelect').value;
             const date = document.getElementById('dateInput').value;
-            let url = '/api/history';
+            const tableType = document.getElementById('tableType').value;
+            let url = `/api/history?type=${tableType}&page=${page}`;
             if (range && date) {
-                url += `?range=${range}&date=${date}`;
+                url += `&range=${range}&date=${date}`;
             }
-            const data = await fetch(url).then(r => r.json());
-            // 表
-            const ht = document.querySelector('#history-table tbody');
-            ht.innerHTML = data.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.co2_ppm || ''}</td><td>${row.temperature || ''}</td><td>${row.humidity || ''}</td><td>${row.measured_at}</td></tr>`).join('');
-            // データ分割
-            // 階ごと混雑度
-            const congestionByFloor = {};
-            data.filter(r => r.congestion_level !== null && r.congestion_level !== undefined && r.floor_number !== null && r.floor_number !== undefined)
-                .forEach(r => {
-                    if (!congestionByFloor[r.floor_number]) congestionByFloor[r.floor_number] = [];
-                    congestionByFloor[r.floor_number].push(r);
-                });
-            // CO2, temp, hum, RTT
-            const co2 = data.filter(r => r.co2_ppm !== null && r.co2_ppm !== undefined);
-            const temp = data.filter(r => r.temperature !== null && r.temperature !== undefined);
-            const hum = data.filter(r => r.humidity !== null && r.humidity !== undefined);
-            const rtt = data.filter(r => r.rtt_value !== null && r.rtt_value !== undefined);
-            // グラフ
-            // 混雑度: 階ごと
-            const ctxC = document.getElementById('congestionChart').getContext('2d');
-            if (ctxC._chart) ctxC._chart.destroy();
-            ctxC._chart = new Chart(ctxC, {
-                type: 'line',
-                data: {
-                    labels: data.map(r => r.measured_at),
-                    datasets: Object.keys(congestionByFloor).map(floor => ({
-                        label: `${floor}F`,
-                        data: congestionByFloor[floor].map(r => r.congestion_level),
-                        borderColor: ['blue', 'purple', 'navy', 'teal', 'aqua'][floor % 5],
-                        fill: false
-                    }))
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: true } },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: { unit: 'minute', displayFormats: { minute: 'HH:mm:ss' } },
-                            ticks: { autoSkip: true, maxTicksLimit: 8 }
-                        }
-                    }
+            const res = await fetch(url);
+            const result = await res.json();
+            const data = result.data;
+            const totalPages = result.totalPages || 1;
+            // 表切替
+            let html = '';
+            if (tableType === 'congestion') {
+                html += `<table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>`;
+                html += data.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.measured_at}</td></tr>`).join('');
+                html += '</tbody></table>';
+            } else if (tableType === 'environment') {
+                html += `<table><thead><tr><th>デバイス</th><th>CO₂</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>`;
+                html += data.map(row => `<tr><td>${row.device_id}</td><td>${row.co2_ppm}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
+                html += '</tbody></table>';
+            } else if (tableType === 'accident') {
+                html += `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th><th>解決</th></tr></thead><tbody>`;
+                html += data.map(row => `<tr><td>${row.device_id}</td><td>${row.accident_type}</td><td>${row.occurred_at}</td><td>${row.is_resolved ? '済' : '未'}</td></tr>`).join('');
+                html += '</tbody></table>';
+            }
+            // ページネーション
+            if (totalPages > 1) {
+                html += '<div style="margin:10px 0;">';
+                for (let i = 1; i <= totalPages; i++) {
+                    html += `<button onclick="fetchHistory(${i})"${i === page ? ' style=\"font-weight:bold\"' : ''}>${i}</button> `;
                 }
-            });
-            // CO2
-            const makeChart = (ctx, label, arr, key, color) => {
-                if (!ctx) return;
-                if (ctx._chart) { ctx._chart.destroy(); }
-                ctx._chart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: arr.map(r => r.measured_at),
-                        datasets: [{ label, data: arr.map(r => r[key]), borderColor: color, fill: false }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: {
-                                type: 'time',
-                                time: { unit: 'minute', displayFormats: { minute: 'HH:mm:ss' } },
-                                ticks: { autoSkip: true, maxTicksLimit: 8 }
-                            }
-                        }
-                    }
-                });
-            };
-            makeChart(document.getElementById('co2Chart').getContext('2d'), 'CO₂', co2, 'co2_ppm', 'green');
-            makeChart(document.getElementById('tempChart').getContext('2d'), '温度', temp, 'temperature', 'red');
-            makeChart(document.getElementById('humChart').getContext('2d'), '湿度', hum, 'humidity', 'orange');
-            // RTT
-            const ctxR = document.getElementById('rttChart').getContext('2d');
-            if (ctxR._chart) ctxR._chart.destroy();
-            ctxR._chart = new Chart(ctxR, {
-                type: 'line',
-                data: {
-                    labels: rtt.map(r => r.measured_at),
-                    datasets: [{ label: 'RTT', data: rtt.map(r => r.rtt_value), borderColor: 'black', fill: false }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: { unit: 'minute', displayFormats: { minute: 'HH:mm:ss' } },
-                            ticks: { autoSkip: true, maxTicksLimit: 8 }
-                        }
-                    }
-                }
-            });
+                html += '</div>';
+            }
+            document.getElementById('tableArea').innerHTML = html;
         }
         // CSVダウンロード
         async function downloadCSV() {
