@@ -111,6 +111,10 @@
                 <h4>RTT指標</h4>
                 <canvas id="rttChart" height="100"></canvas>
             </div>
+            <div style="flex:1; min-width:300px;">
+                <h4>事故情報</h4>
+                <canvas id="accidentChart" height="100"></canvas>
+            </div>
         </div>
         <div style="margin: 10px 0;">
             <label>表示範囲:
@@ -158,8 +162,8 @@
         async function fetchHistory(page = 1) {
             const range = document.getElementById('rangeSelect').value;
             const date = document.getElementById('dateInput').value;
-            const tableType = document.getElementById('tableType').value;
-            let url = `/api/history?type=${tableType}&page=${page}`;
+            //const tableType = document.getElementById('tableType').value;
+            let url = `/api/history?page=${page}`;
             if (range && date) {
                 url += `&range=${range}&date=${date}`;
             }
@@ -168,18 +172,22 @@
             const data = result.data;
             const totalPages = result.totalPages || 1;
             // 表切替
+            const tableType = document.getElementById('tableType').value;
             let html = '';
             if (tableType === 'congestion') {
                 html += `<table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>`;
-                html += data.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.measured_at}</td></tr>`).join('');
+                html += data.filter(row => row.congestion_level !== undefined && row.congestion_level !== null)
+                    .map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.measured_at}</td></tr>`).join('');
                 html += '</tbody></table>';
             } else if (tableType === 'environment') {
                 html += `<table><thead><tr><th>デバイス</th><th>CO₂</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>`;
-                html += data.map(row => `<tr><td>${row.device_id}</td><td>${row.co2_ppm}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
+                html += data.filter(row => row.co2_ppm !== undefined && row.co2_ppm !== null)
+                    .map(row => `<tr><td>${row.device_id}</td><td>${row.co2_ppm}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
                 html += '</tbody></table>';
             } else if (tableType === 'accident') {
                 html += `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th><th>解決</th></tr></thead><tbody>`;
-                html += data.map(row => `<tr><td>${row.device_id}</td><td>${row.accident_type}</td><td>${row.occurred_at}</td><td>${row.is_resolved ? '済' : '未'}</td></tr>`).join('');
+                html += data.filter(row => row.accident_type !== undefined && row.accident_type !== null)
+                    .map(row => `<tr><td>${row.device_id}</td><td>${row.accident_type}</td><td>${row.occurred_at}</td><td>${row.is_resolved ? '済' : '未'}</td></tr>`).join('');
                 html += '</tbody></table>';
             }
             // ページネーション
@@ -269,6 +277,50 @@
                             type: 'time',
                             time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } },
                             ticks: { autoSkip: true, maxTicksLimit: 8 }
+                        }
+                    }
+                }
+            });
+            // 事故情報グラフ（点プロット）
+            const accident = data.filter(r => r.accident_type !== undefined && r.accident_type !== null);
+            const ctxA = document.getElementById('accidentChart').getContext('2d');
+            if (ctxA._chart) ctxA._chart.destroy();
+            ctxA._chart = new Chart(ctxA, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: '事故発生',
+                            data: accident.map(r => ({ x: toISO(r.occurred_at), y: 1, accident_type: r.accident_type, device_id: r.device_id })),
+                            backgroundColor: 'red',
+                            pointRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const d = context.raw;
+                                    return `${d.x} ${d.device_id || ''} ${d.accident_type || ''}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } },
+                            title: { display: true, text: '時刻' },
+                            ticks: { autoSkip: true, maxTicksLimit: 8 }
+                        },
+                        y: {
+                            display: false,
+                            min: 0,
+                            max: 2
                         }
                     }
                 }
