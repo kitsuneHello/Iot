@@ -72,7 +72,7 @@ app.get('/api/rtt/latest', (req, res) => {
 
 // 過去データ（混雑度・環境・RTT・事故）
 app.get('/api/history', (req, res) => {
-    let { range, date, type = 'congestion', page = 1 } = req.query;
+    let { range, date, page = 1 } = req.query;
     page = parseInt(page) || 1;
     const pageSize = 30;
     let where = '';
@@ -89,31 +89,16 @@ app.get('/api/history', (req, res) => {
             params.push(date);
         }
     }
-    let sql = '';
-    if (type === 'congestion') {
-        sql = `SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY c.device_id, measured_at ORDER BY measured_at DESC LIMIT ? OFFSET ?`;
-    } else if (type === 'environment') {
-        sql = `SELECT e.device_id, e.co2_ppm, e.temperature, e.humidity, e.measured_at FROM environment_logs e ${where} ORDER BY e.measured_at DESC LIMIT ? OFFSET ?`;
-    } else if (type === 'accident') {
-        sql = `SELECT a.device_id, a.accident_type, a.occurred_at, a.is_resolved FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC LIMIT ? OFFSET ?`;
-    }
-    // 件数取得
-    let countSql = '';
-    if (type === 'congestion') {
-        countSql = `SELECT COUNT(*) AS cnt FROM (SELECT 1 FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY c.device_id, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00')) t`;
-    } else if (type === 'environment') {
-        countSql = `SELECT COUNT(*) AS cnt FROM environment_logs e ${where}`;
-    } else if (type === 'accident') {
-        countSql = `SELECT COUNT(*) AS cnt FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')}`;
-    }
-    db.query(countSql, params, (err, countRes) => {
+    // 各テーブルごとにLIMITをかけてUNION ALL
+    const congestionSql = `SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, NULL AS rtt_value, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY c.device_id, measured_at ORDER BY measured_at DESC LIMIT ${pageSize}`;
+    const envSql = `SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.co2_ppm, e.temperature, e.humidity, NULL AS rtt_value, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM environment_logs e ${where} ORDER BY e.measured_at DESC LIMIT ${pageSize}`;
+    const rttSql = `SELECT NULL AS floor_number, NULL AS device_id, NULL AS congestion_level, t.end_time AS measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, SUM(c.congestion_level) AS rtt_value, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM elevator_trips t LEFT JOIN congestion_logs c ON c.measured_at BETWEEN t.start_time AND t.end_time ${where} GROUP BY t.id ORDER BY t.end_time DESC LIMIT ${pageSize}`;
+    const accidentSql = `SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS co2_ppm, NULL AS temperature, NULL AS humidity, NULL AS rtt_value, a.accident_type, a.occurred_at, a.is_resolved FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC LIMIT ${pageSize}`;
+    // 合成
+    const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${rttSql} UNION ALL ${accidentSql}`;
+    db.query(unionSql, [...params, ...params, ...params, ...params], (err, results) => {
         if (err) return res.status(500).send('DB Error');
-        const total = countRes[0].cnt;
-        const totalPages = Math.ceil(total / pageSize);
-        db.query(sql, [...params, pageSize, (page - 1) * pageSize], (err, results) => {
-            if (err) return res.status(500).send('DB Error');
-            res.json({ data: results, totalPages });
-        });
+        res.json({ data: results, totalPages: 1 });
     });
 });
 
