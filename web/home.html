@@ -134,6 +134,10 @@
     </div>
 
     <script>
+        // 日時をISO8601に変換
+        function toISO(dt) {
+            return dt ? dt.replace(' ', 'T') : dt;
+        }
         // リアルタイムデータ取得
         async function fetchRealtime() {
             const [congestion, env, rtt] = await Promise.all([
@@ -201,7 +205,7 @@
             ctxC._chart = new Chart(ctxC, {
                 type: 'line',
                 data: {
-                    labels: data.map(r => r.measured_at),
+                    labels: data.map(r => toISO(r.measured_at)),
                     datasets: Object.keys(congestionByFloor).map((floor, idx) => ({
                         label: `${floor}F`,
                         data: congestionByFloor[floor].map(r => r.congestion_level),
@@ -232,7 +236,7 @@
                 ctx._chart = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: arr.map(r => r.measured_at),
+                        labels: arr.map(r => toISO(r.measured_at)),
                         datasets: [{ label, data: arr.map(r => r[key]), borderColor: color, fill: false }]
                     },
                     options: {
@@ -257,7 +261,7 @@
             ctxR._chart = new Chart(ctxR, {
                 type: 'line',
                 data: {
-                    labels: rtt.map(r => r.measured_at),
+                    labels: rtt.map(r => toISO(r.measured_at)),
                     datasets: [{ label: 'RTT', data: rtt.map(r => r.rtt_value), borderColor: 'black', fill: false }]
                 },
                 options: {
