@@ -205,10 +205,9 @@
             ctxC._chart = new Chart(ctxC, {
                 type: 'line',
                 data: {
-                    labels: data.map(r => toISO(r.measured_at)),
                     datasets: Object.keys(congestionByFloor).map((floor, idx) => ({
                         label: `${floor}F`,
-                        data: congestionByFloor[floor].map(r => r.congestion_level),
+                        data: congestionByFloor[floor].map(r => ({ x: toISO(r.measured_at), y: r.congestion_level })),
                         borderColor: ['blue', 'purple', 'navy', 'teal', 'aqua'][idx % 5],
                         fill: false
                     }))
@@ -236,8 +235,7 @@
                 ctx._chart = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: arr.map(r => toISO(r.measured_at)),
-                        datasets: [{ label, data: arr.map(r => r[key]), borderColor: color, fill: false }]
+                        datasets: [{ label, data: arr.map(r => ({ x: toISO(r.measured_at), y: r[key] })), borderColor: color, fill: false }]
                     },
                     options: {
                         responsive: true,
@@ -261,8 +259,7 @@
             ctxR._chart = new Chart(ctxR, {
                 type: 'line',
                 data: {
-                    labels: rtt.map(r => toISO(r.measured_at)),
-                    datasets: [{ label: 'RTT', data: rtt.map(r => r.rtt_value), borderColor: 'black', fill: false }]
+                    datasets: [{ label: 'RTT', data: rtt.map(r => ({ x: toISO(r.measured_at), y: r.rtt_value })), borderColor: 'black', fill: false }]
                 },
                 options: {
                     responsive: true,
