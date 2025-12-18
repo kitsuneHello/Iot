@@ -24,7 +24,7 @@ const mqttClient = mqtt.connect('mqtt://127.0.0.1:1883');
 
 // API例
 app.get('/api/congestion', (req, res) => {
-    db.query('SELECT * FROM congestion_logs ORDER BY measured_at DESC LIMIT 10', (err, results) => {
+    db.query('SELECT * FROM congestion_logs ORDER BY measured_at DESC', (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json(results);
     });
@@ -60,12 +60,6 @@ app.get('/api/environment/latest', (req, res) => {
     });
 });
 
-// 最新の混雑RTT指標（削除: elevator_tripsテーブルがないため）
-// app.get('/api/rtt/latest', ... ) を削除
-app.get('/api/rtt/latest', (req, res) => {
-    res.json({ value: null });
-});
-
 // 過去データ（混雑度・環境・事故のみ）
 app.get('/api/history', (req, res) => {
     let { range, date, page = 1 } = req.query;
@@ -85,12 +79,12 @@ app.get('/api/history', (req, res) => {
             params.push(date);
         }
     }
-    // 各テーブルごとにLIMITをかけてUNION ALL（サブクエリ化）
-    const congestionSql = `(SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY c.device_id, measured_at ORDER BY measured_at DESC LIMIT ${pageSize})`;
-    const envSql = `(SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.pressure, e.temperature, e.humidity, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM environment_logs e ${where} ORDER BY e.measured_at DESC LIMIT ${pageSize})`;
+
+    const congestionSql = `(SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, DATE_FORMAT(c.measured_at, '%Y-%m-%d %H:00:00') AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY c.device_id, measured_at ORDER BY measured_at DESC)`;
+    const envSql = `(SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.pressure, e.temperature, e.humidity, NULL AS accident_type, NULL AS occurred_at, NULL AS is_resolved FROM environment_logs e ${where} ORDER BY e.measured_at DESC)`;
     // RTT部分を削除
     // const rttSql = ...;
-    const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at, a.is_resolved FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC LIMIT ${pageSize})`;
+    const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at, a.is_resolved FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC)`;
     // 合成
     const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql}`;
     db.query(unionSql, [...params, ...params, ...params], (err, results) => {
@@ -152,6 +146,12 @@ mqttClient.on('message', (topic, message) => {
     }
 });
 
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
