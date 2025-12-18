@@ -72,7 +72,7 @@
                 <thead>
                     <tr>
                         <th>デバイス</th>
-                        <th>CO₂</th>
+                        <th>気圧</th>
                         <th>温度</th>
                         <th>湿度</th>
                         <th>時刻</th>
@@ -80,10 +80,6 @@
                 </thead>
                 <tbody></tbody>
             </table>
-        </div>
-        <div>
-            <h3>最新混雑RTT指標</h3>
-            <div id="rtt-value">取得中...</div>
         </div>
     </div>
 
@@ -96,8 +92,8 @@
                 <canvas id="congestionChart" height="100"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
-                <h4>CO₂</h4>
-                <canvas id="co2Chart" height="100"></canvas>
+                <h4>気圧</h4>
+                <canvas id="pressureChart" height="100"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
                 <h4>温度</h4>
@@ -106,10 +102,6 @@
             <div style="flex:1; min-width:300px;">
                 <h4>湿度</h4>
                 <canvas id="humChart" height="100"></canvas>
-            </div>
-            <div style="flex:1; min-width:300px;">
-                <h4>RTT指標</h4>
-                <canvas id="rttChart" height="100"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
                 <h4>事故情報</h4>
@@ -137,19 +129,16 @@
         }
         // リアルタイムデータ取得
         async function fetchRealtime() {
-            const [congestion, env, rtt] = await Promise.all([
+            const [congestion, env] = await Promise.all([
                 fetch('/api/congestion/latest').then(r => r.json()),
-                fetch('/api/environment/latest').then(r => r.json()),
-                fetch('/api/rtt/latest').then(r => r.json())
+                fetch('/api/environment/latest').then(r => r.json())
             ]);
             // 混雑度
             const ct = document.querySelector('#congestion-table tbody');
             ct.innerHTML = congestion.map(row => `<tr><td>${row.floor_number}</td><td>${row.congestion_level}</td><td>${row.measured_at}</td></tr>`).join('');
             // 環境
             const et = document.querySelector('#env-table tbody');
-            et.innerHTML = env.map(row => `<tr><td>${row.device_id}</td><td>${row.co2_ppm}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
-            // RTT
-            document.getElementById('rtt-value').textContent = rtt.value;
+            et.innerHTML = env.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
         }
         // 過去データ取得
         async function fetchHistory(page = 1) {
@@ -171,9 +160,9 @@
             html += congestion.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.measured_at}</td></tr>`).join('');
             html += '</tbody></table>';
             // 環境データ
-            const environment = data.filter(row => row.co2_ppm !== undefined && row.co2_ppm !== null);
-            html += `<h4>環境データ</h4><table><thead><tr><th>デバイス</th><th>CO₂</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>`;
-            html += environment.map(row => `<tr><td>${row.device_id}</td><td>${row.co2_ppm}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
+            const environment = data.filter(row => row.pressure !== undefined && row.pressure !== null);
+            html += `<h4>環境データ</h4><table><thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>`;
+            html += environment.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
             html += '</tbody></table>';
             // 事故情報
             const accidentTable = data.filter(row => row.accident_type !== undefined && row.accident_type !== null);
@@ -222,11 +211,10 @@
                     }
                 }
             });
-            // CO2
-            const co2 = data.filter(r => r.co2_ppm !== null && r.co2_ppm !== undefined);
+            // 気圧
+            const pressure = data.filter(r => r.pressure !== null && r.pressure !== undefined);
             const temp = data.filter(r => r.temperature !== null && r.temperature !== undefined);
             const hum = data.filter(r => r.humidity !== null && r.humidity !== undefined);
-            const rtt = data.filter(r => r.rtt_value !== null && r.rtt_value !== undefined);
             const makeChart = (ctx, label, arr, key, color) => {
                 if (!ctx) return;
                 if (ctx._chart) { ctx._chart.destroy(); }
@@ -248,29 +236,9 @@
                     }
                 });
             };
-            makeChart(document.getElementById('co2Chart').getContext('2d'), 'CO₂', co2, 'co2_ppm', 'green');
+            makeChart(document.getElementById('pressureChart').getContext('2d'), '気圧', pressure, 'pressure', 'green');
             makeChart(document.getElementById('tempChart').getContext('2d'), '温度', temp, 'temperature', 'red');
             makeChart(document.getElementById('humChart').getContext('2d'), '湿度', hum, 'humidity', 'orange');
-            // RTT
-            const ctxR = document.getElementById('rttChart').getContext('2d');
-            if (ctxR._chart) ctxR._chart.destroy();
-            ctxR._chart = new Chart(ctxR, {
-                type: 'line',
-                data: {
-                    datasets: [{ label: 'RTT', data: rtt.map(r => ({ x: toISO(r.measured_at), y: r.rtt_value })), borderColor: 'black', fill: false }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } },
-                            ticks: { autoSkip: true, maxTicksLimit: 8 }
-                        }
-                    }
-                }
-            });
             // 事故状況グラフ（点プロット）
             const accidentData = data.filter(r => r.accident_type !== undefined && r.accident_type !== null);
             const ctxA = document.getElementById('accidentChart').getContext('2d');
@@ -318,9 +286,10 @@
         }
         // CSVダウンロード
         async function downloadCSV() {
-            const data = await fetch('/api/history').then(r => r.json());
-            let csv = '階/デバイス,混雑度,CO₂,温度,湿度,時刻\n';
-            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.co2_ppm || ''},${row.temperature || ''},${row.humidity || ''},${row.measured_at}`).join('\n');
+            const result = await fetch('/api/history').then(r => r.json());
+            const data = result.data || result; // 互換
+            let csv = '階/デバイス,混雑度,気圧,温度,湿度,時刻\n';
+            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.pressure || ''},${row.temperature || ''},${row.humidity || ''},${row.measured_at}`).join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
