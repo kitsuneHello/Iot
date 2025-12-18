@@ -46,6 +46,11 @@
         .download-btn {
             margin-bottom: 10px;
         }
+
+        .scrollable-table {
+            max-height: 500px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 
@@ -55,31 +60,35 @@
     <div class="realtime">
         <div>
             <h3>各階の最新混雑度</h3>
-            <table id="congestion-table">
-                <thead>
-                    <tr>
-                        <th>階</th>
-                        <th>混雑度</th>
-                        <th>時刻</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="scrollable-table">
+                <table id="congestion-table">
+                    <thead>
+                        <tr>
+                            <th>階</th>
+                            <th>混雑度</th>
+                            <th>時刻</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         <div>
             <h3>最新エレベーター環境</h3>
-            <table id="env-table">
-                <thead>
-                    <tr>
-                        <th>デバイス</th>
-                        <th>気圧</th>
-                        <th>温度</th>
-                        <th>湿度</th>
-                        <th>時刻</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="scrollable-table">
+                <table id="env-table">
+                    <thead>
+                        <tr>
+                            <th>デバイス</th>
+                            <th>気圧</th>
+                            <th>温度</th>
+                            <th>湿度</th>
+                            <th>時刻</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -119,7 +128,7 @@
                 <input type="date" id="dateInput" value="" onchange="fetchHistory()">
             </label>
         </div>
-        <div id="tableArea"></div>
+        <div id="tableArea" class="scrollable-table"></div>
     </div>
 
     <script>
