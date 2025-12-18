@@ -162,13 +162,6 @@
             document.querySelector('#env-table').parentElement.classList.toggle('scrollable-table', env.length > 30);
         }
 
-        // カラーパレットとフロア毎の色マップ
-        const colorPalette = [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
-        ];
-        const floorColorMap = new Map();
-
         // グラフの初期化
         let congestionChart, pressureChart, tempChart, humChart, accidentChart;
 
@@ -179,19 +172,10 @@
             const ctxHum = document.getElementById('humChart').getContext('2d');
             const ctxAccident = document.getElementById('accidentChart').getContext('2d');
 
-            // 混雑度は最初は空のdatasetsで初期化（階ごとにdatasetを差し替える）
             congestionChart = new Chart(ctxCongestion, {
                 type: 'line',
-                data: { labels: [], datasets: [] },
-                options: {
-                    responsive: true,
-                    parsing: false, // dataは {x,y} 形式を使うためパースを無効化
-                    scales: {
-                        x: { type: 'time', time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss' } },
-                        y: { beginAtZero: true }
-                    },
-                    plugins: { legend: { display: true } }
-                }
+                data: { labels: [], datasets: [{ label: '混雑度', data: [], borderColor: 'blue', fill: false }] },
+                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
             });
 
             pressureChart = new Chart(ctxPressure, {
@@ -297,9 +281,9 @@
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const dd = String(today.getDate()).padStart(2, '0');
             document.getElementById('dateInput').value = `${yyyy}-${mm}-${dd}`;
-            initCharts(); // <- init を先に呼ぶ（fetchHistory がChartを参照するため）
             fetchRealtime();
             fetchHistory();
+            initCharts();
             setInterval(fetchRealtime, 5000);
         });
     </script>
