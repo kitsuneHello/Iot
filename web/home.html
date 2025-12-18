@@ -51,6 +51,26 @@
             max-height: 500px;
             overflow-y: auto;
         }
+
+        /* グラフを2列表示にするレイアウト */
+        .charts-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .chart-card {
+            flex: 0 1 calc(50% - 30px);
+            box-sizing: border-box;
+            min-width: 300px;
+        }
+
+        /* canvas の高さを固定して見た目を揃える */
+        .chart-card canvas {
+            width: 100%;
+            height: 260px;
+            display: block;
+        }
     </style>
 </head>
 
@@ -95,26 +115,26 @@
     <h2>過去データ</h2>
     <div>
         <button class="download-btn" onclick="downloadCSV()">CSVダウンロード</button>
-        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-            <div style="flex:1; min-width:300px;">
+        <div class="charts-container">
+            <div class="chart-card">
                 <h4>混雑度</h4>
-                <canvas id="congestionChart" height="100"></canvas>
+                <canvas id="congestionChart"></canvas>
             </div>
-            <div style="flex:1; min-width:300px;">
+            <div class="chart-card">
                 <h4>気圧</h4>
-                <canvas id="pressureChart" height="100"></canvas>
+                <canvas id="pressureChart"></canvas>
             </div>
-            <div style="flex:1; min-width:300px;">
+            <div class="chart-card">
                 <h4>温度</h4>
-                <canvas id="tempChart" height="100"></canvas>
+                <canvas id="tempChart"></canvas>
             </div>
-            <div style="flex:1; min-width:300px;">
+            <div class="chart-card">
                 <h4>湿度</h4>
-                <canvas id="humChart" height="100"></canvas>
+                <canvas id="humChart"></canvas>
             </div>
-            <div style="flex:1; min-width:300px;">
+            <div class="chart-card">
                 <h4>事故情報</h4>
-                <canvas id="accidentChart" height="100"></canvas>
+                <canvas id="accidentChart"></canvas>
             </div>
         </div>
         <div style="margin: 10px 0;">
@@ -175,31 +195,38 @@
             congestionChart = new Chart(ctxCongestion, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '混雑度', data: [], borderColor: 'blue', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time' },
+                        y: { min: 0, max: 1, beginAtZero: true } // 混雑度を0〜1に固定
+                    }
+                }
             });
 
             pressureChart = new Chart(ctxPressure, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '気圧', data: [], borderColor: 'green', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
             });
 
             tempChart = new Chart(ctxTemp, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '温度', data: [], borderColor: 'red', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
             });
 
             humChart = new Chart(ctxHum, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '湿度', data: [], borderColor: 'purple', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
             });
 
             accidentChart = new Chart(ctxAccident, {
                 type: 'bar',
                 data: { labels: [], datasets: [{ label: '事故件数', data: [], backgroundColor: 'orange' }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
             });
         }
 
@@ -281,9 +308,9 @@
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const dd = String(today.getDate()).padStart(2, '0');
             document.getElementById('dateInput').value = `${yyyy}-${mm}-${dd}`;
+            initCharts();      // 先にチャート初期化
             fetchRealtime();
-            fetchHistory();
-            initCharts();
+            fetchHistory();    // 初期化後にデータを描画
             setInterval(fetchRealtime, 5000);
         });
     </script>
