@@ -128,7 +128,50 @@
                 <input type="date" id="dateInput" value="" onchange="fetchHistory()">
             </label>
         </div>
-        <div id="tableArea" class="scrollable-table"></div>
+        <div>
+            <h4>混雑度</h4>
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>階/デバイス</th>
+                            <th>混雑度</th>
+                            <th>時刻</th>
+                        </tr>
+                    </thead>
+                    <tbody id="congestion-history"></tbody>
+                </table>
+            </div>
+            <h4>環境データ</h4>
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>デバイス</th>
+                            <th>気圧</th>
+                            <th>温度</th>
+                            <th>湿度</th>
+                            <th>時刻</th>
+                        </tr>
+                    </thead>
+                    <tbody id="environment-history"></tbody>
+                </table>
+            </div>
+            <h4>事故情報</h4>
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>デバイス</th>
+                            <th>事故種別</th>
+                            <th>発生時刻</th>
+                            <th>解決</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accident-history"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
