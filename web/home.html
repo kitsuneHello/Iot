@@ -51,6 +51,11 @@
             max-height: 500px;
             overflow-y: auto;
         }
+
+        /* グラフの最小高さを確保（レスポンシブ時の見栄え向上） */
+        canvas {
+            min-height: 220px;
+        }
     </style>
 </head>
 
@@ -98,23 +103,23 @@
         <div style="display: flex; gap: 30px; flex-wrap: wrap;">
             <div style="flex:1; min-width:300px;">
                 <h4>混雑度</h4>
-                <canvas id="congestionChart" height="100"></canvas>
+                <canvas id="congestionChart" height="220"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
                 <h4>気圧</h4>
-                <canvas id="pressureChart" height="100"></canvas>
+                <canvas id="pressureChart" height="220"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
                 <h4>温度</h4>
-                <canvas id="tempChart" height="100"></canvas>
+                <canvas id="tempChart" height="220"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
                 <h4>湿度</h4>
-                <canvas id="humChart" height="100"></canvas>
+                <canvas id="humChart" height="220"></canvas>
             </div>
             <div style="flex:1; min-width:300px;">
                 <h4>事故情報</h4>
-                <canvas id="accidentChart" height="100"></canvas>
+                <canvas id="accidentChart" height="220"></canvas>
             </div>
         </div>
         <div style="margin: 10px 0;">
@@ -181,7 +186,7 @@
                         x: { type: 'time' },
                         y: {
                             min: 0,
-                            max: 1.5,
+                            max: 1,
                             beginAtZero: true,
                             ticks: { stepSize: 0.1 }
                         }
