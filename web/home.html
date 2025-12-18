@@ -189,7 +189,7 @@
                 data: { labels: [], datasets: [] },
                 options: {
                     responsive: true,
-                    parsing: false, // データは {x, y} 形式で扱う
+                    // parsing を指定しない（デフォルトのパースを使う）
                     scales: {
                         x: { type: 'time' },
                         y: {
@@ -265,7 +265,6 @@
             document.getElementById('accidentTableContainer').classList.toggle('scrollable-table', accidentTable.length > 30);
 
             // グラフデータ更新
-            congestionChart.data.labels = congestion.map(row => row.measured_at);
             // 階ごとにグループ化して datasets を作成（floor_number または device_id をキーに）
             const keyGetter = r => (r.floor_number !== undefined && r.floor_number !== null) ? `階 ${r.floor_number}` : (r.device_id || 'unknown');
             const groups = {};
@@ -287,6 +286,7 @@
                     spanGaps: true,
                     tension: 0.2,
                     fill: false,
+                    borderWidth: 2,
                     pointRadius: 2
                 };
             });
