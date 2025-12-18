@@ -128,50 +128,7 @@
                 <input type="date" id="dateInput" value="" onchange="fetchHistory()">
             </label>
         </div>
-        <div>
-            <h4>混雑度</h4>
-            <div class="scrollable-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>階/デバイス</th>
-                            <th>混雑度</th>
-                            <th>時刻</th>
-                        </tr>
-                    </thead>
-                    <tbody id="congestion-history"></tbody>
-                </table>
-            </div>
-            <h4>環境データ</h4>
-            <div class="scrollable-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>デバイス</th>
-                            <th>気圧</th>
-                            <th>温度</th>
-                            <th>湿度</th>
-                            <th>時刻</th>
-                        </tr>
-                    </thead>
-                    <tbody id="environment-history"></tbody>
-                </table>
-            </div>
-            <h4>事故情報</h4>
-            <div class="scrollable-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>デバイス</th>
-                            <th>事故種別</th>
-                            <th>発生時刻</th>
-                            <th>解決</th>
-                        </tr>
-                    </thead>
-                    <tbody id="accident-history"></tbody>
-                </table>
-            </div>
-        </div>
+        <div id="tableArea" class="scrollable-table"></div>
     </div>
 
     <script>
@@ -179,19 +136,25 @@
         function toISO(dt) {
             return dt ? dt.replace(' ', 'T') : dt;
         }
+
         // リアルタイムデータ取得
         async function fetchRealtime() {
             const [congestion, env] = await Promise.all([
                 fetch('/api/congestion/latest').then(r => r.json()),
                 fetch('/api/environment/latest').then(r => r.json())
             ]);
+
             // 混雑度
             const ct = document.querySelector('#congestion-table tbody');
             ct.innerHTML = congestion.map(row => `<tr><td>${row.floor_number}</td><td>${row.congestion_level}</td><td>${row.measured_at}</td></tr>`).join('');
+            document.querySelector('#congestion-table').parentElement.classList.toggle('scrollable-table', congestion.length > 30);
+
             // 環境
             const et = document.querySelector('#env-table tbody');
             et.innerHTML = env.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
+            document.querySelector('#env-table').parentElement.classList.toggle('scrollable-table', env.length > 30);
         }
+
         // 過去データ取得
         async function fetchHistory(page = 1) {
             const range = document.getElementById('rangeSelect').value;
@@ -204,23 +167,27 @@
             const result = await res.json();
             const data = result.data;
             const totalPages = result.totalPages || 1;
+
             // --- 表を項目ごとに分割 ---
             let html = '';
             // 混雑度
             const congestion = data.filter(row => row.congestion_level !== undefined && row.congestion_level !== null);
-            html += `<h4>混雑度</h4><table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>`;
+            html += `<h4>混雑度</h4><div class="${congestion.length > 30 ? 'scrollable-table' : ''}"><table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>`;
             html += congestion.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.measured_at}</td></tr>`).join('');
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
+
             // 環境データ
             const environment = data.filter(row => row.pressure !== undefined && row.pressure !== null);
-            html += `<h4>環境データ</h4><table><thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>`;
+            html += `<h4>環境データ</h4><div class="${environment.length > 30 ? 'scrollable-table' : ''}"><table><thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>`;
             html += environment.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
+
             // 事故情報
             const accidentTable = data.filter(row => row.accident_type !== undefined && row.accident_type !== null);
-            html += `<h4>事故情報</h4><table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th><th>解決</th></tr></thead><tbody>`;
+            html += `<h4>事故情報</h4><div class="${accidentTable.length > 30 ? 'scrollable-table' : ''}"><table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th><th>解決</th></tr></thead><tbody>`;
             html += accidentTable.map(row => `<tr><td>${row.device_id}</td><td>${row.accident_type}</td><td>${row.occurred_at}</td><td>${row.is_resolved ? '済' : '未'}</td></tr>`).join('');
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
+
             // ページネーション
             if (totalPages > 1) {
                 html += '<div style="margin:10px 0;">';
