@@ -162,6 +162,47 @@
             document.querySelector('#env-table').parentElement.classList.toggle('scrollable-table', env.length > 30);
         }
 
+        // グラフの初期化
+        let congestionChart, pressureChart, tempChart, humChart, accidentChart;
+
+        function initCharts() {
+            const ctxCongestion = document.getElementById('congestionChart').getContext('2d');
+            const ctxPressure = document.getElementById('pressureChart').getContext('2d');
+            const ctxTemp = document.getElementById('tempChart').getContext('2d');
+            const ctxHum = document.getElementById('humChart').getContext('2d');
+            const ctxAccident = document.getElementById('accidentChart').getContext('2d');
+
+            congestionChart = new Chart(ctxCongestion, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: '混雑度', data: [], borderColor: 'blue', fill: false }] },
+                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+            });
+
+            pressureChart = new Chart(ctxPressure, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: '気圧', data: [], borderColor: 'green', fill: false }] },
+                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+            });
+
+            tempChart = new Chart(ctxTemp, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: '温度', data: [], borderColor: 'red', fill: false }] },
+                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+            });
+
+            humChart = new Chart(ctxHum, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: '湿度', data: [], borderColor: 'purple', fill: false }] },
+                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+            });
+
+            accidentChart = new Chart(ctxAccident, {
+                type: 'bar',
+                data: { labels: [], datasets: [{ label: '事故件数', data: [], backgroundColor: 'orange' }] },
+                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+            });
+        }
+
         // 過去データ取得
         async function fetchHistory(page = 1) {
             const range = document.getElementById('rangeSelect').value;
@@ -197,6 +238,27 @@
                 `</tbody></table>`;
             document.getElementById('accidentTableContainer').innerHTML = accidentHtml;
             document.getElementById('accidentTableContainer').classList.toggle('scrollable-table', accidentTable.length > 30);
+
+            // グラフデータ更新
+            congestionChart.data.labels = congestion.map(row => row.measured_at);
+            congestionChart.data.datasets[0].data = congestion.map(row => row.congestion_level);
+            congestionChart.update();
+
+            pressureChart.data.labels = environment.map(row => row.measured_at);
+            pressureChart.data.datasets[0].data = environment.map(row => row.pressure);
+            pressureChart.update();
+
+            tempChart.data.labels = environment.map(row => row.measured_at);
+            tempChart.data.datasets[0].data = environment.map(row => row.temperature);
+            tempChart.update();
+
+            humChart.data.labels = environment.map(row => row.measured_at);
+            humChart.data.datasets[0].data = environment.map(row => row.humidity);
+            humChart.update();
+
+            accidentChart.data.labels = accidentTable.map(row => row.occurred_at);
+            accidentChart.data.datasets[0].data = accidentTable.map(row => 1); // 件数を1でカウント
+            accidentChart.update();
         }
         // CSVダウンロード
         async function downloadCSV() {
@@ -221,6 +283,7 @@
             document.getElementById('dateInput').value = `${yyyy}-${mm}-${dd}`;
             fetchRealtime();
             fetchHistory();
+            initCharts();
             setInterval(fetchRealtime, 5000);
         });
     </script>
