@@ -149,6 +149,12 @@
             return dt ? dt.replace(' ', 'T') : dt;
         }
 
+        // 色を生成（インデックスから一巡する HSL ベース）
+        function getColor(i) {
+            const hue = (i * 45) % 360;
+            return `hsl(${hue} 75% 45%)`;
+        }
+
         // リアルタイムデータ取得
         async function fetchRealtime() {
             const [congestion, env] = await Promise.all([
@@ -177,11 +183,13 @@
             const ctxHum = document.getElementById('humChart').getContext('2d');
             const ctxAccident = document.getElementById('accidentChart').getContext('2d');
 
+            // 混雑度チャート: datasets は fetchHistory で階ごとに作成するため初期は空にする
             congestionChart = new Chart(ctxCongestion, {
                 type: 'line',
-                data: { labels: [], datasets: [{ label: '混雑度', data: [], borderColor: 'blue', fill: false }] },
+                data: { labels: [], datasets: [] },
                 options: {
                     responsive: true,
+                    parsing: false, // データは {x, y} 形式で扱う
                     scales: {
                         x: { type: 'time' },
                         y: {
@@ -190,7 +198,8 @@
                             beginAtZero: true,
                             ticks: { stepSize: 0.1 }
                         }
-                    }
+                    },
+                    plugins: { legend: { position: 'top' } }
                 }
             });
 
@@ -257,7 +266,31 @@
 
             // グラフデータ更新
             congestionChart.data.labels = congestion.map(row => row.measured_at);
-            congestionChart.data.datasets[0].data = congestion.map(row => row.congestion_level);
+            // 階ごとにグループ化して datasets を作成（floor_number または device_id をキーに）
+            const keyGetter = r => (r.floor_number !== undefined && r.floor_number !== null) ? `階 ${r.floor_number}` : (r.device_id || 'unknown');
+            const groups = {};
+            congestion.forEach(r => {
+                const k = keyGetter(r);
+                groups[k] = groups[k] || [];
+                groups[k].push(r);
+            });
+            const datasets = Object.keys(groups).map((k, idx) => {
+                const points = groups[k]
+                    .map(r => ({ x: toISO(r.measured_at), y: Number(r.congestion_level) }))
+                    .sort((a, b) => new Date(a.x) - new Date(b.x));
+                const color = getColor(idx);
+                return {
+                    label: k,
+                    data: points,
+                    borderColor: color,
+                    backgroundColor: color,
+                    spanGaps: true,
+                    tension: 0.2,
+                    fill: false,
+                    pointRadius: 2
+                };
+            });
+            congestionChart.data.datasets = datasets;
             congestionChart.update();
 
             pressureChart.data.labels = environment.map(row => row.measured_at);
