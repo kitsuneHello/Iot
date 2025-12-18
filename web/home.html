@@ -218,6 +218,9 @@
             // 混雑度
             const congestion = data.filter(row => row.congestion_level !== undefined && row.congestion_level !== null);
 
+            // 環境データ
+            const environment = data.filter(row => row.pressure !== undefined && row.pressure !== null);
+
             // 混雑度データを階ごとにグループ化
             const groupedByFloor = {};
             congestion.forEach(row => {
