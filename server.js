@@ -116,12 +116,14 @@ mqttClient.on('connect', () => {
 mqttClient.on('message', (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
+        const timestamp = data.measured_at ? new Date(data.measured_at) : new Date();
+        console.log(data)
         if (topic === 'elevator/congestion') {
             //混雑度を受信
             // { device_id, congestion_level, measured_at }
             db.query(
                 'INSERT INTO congestion_logs (device_id, congestion_level, measured_at) VALUES (?, ?, ?)',
-                [data.device_id, data.congestion_level, data.measured_at || new Date()],
+                [data.device_id, data.congestion_level, data.measured_at || timestamp],
                 (err) => { if (err) console.error('DB insert error (congestion):', err); }
             );
         } else if (topic === 'elevator/environment') {
@@ -129,7 +131,7 @@ mqttClient.on('message', (topic, message) => {
             // { device_id, pressure, temperature, humidity, measured_at }
             db.query(
                 'INSERT INTO environment_logs (device_id, pressure, temperature, humidity, measured_at) VALUES (?, ?, ?, ?, ?)',
-                [data.device_id, data.pressure, data.temperature, data.humidity, data.measured_at || new Date()],
+                [data.device_id, data.pressure, data.temperature, data.humidity, data.measured_at || timestamp],
                 (err) => { if (err) console.error('DB insert error (environment):', err); }
             );
         } else if (topic === 'elevator/accident') {
@@ -137,7 +139,7 @@ mqttClient.on('message', (topic, message) => {
             // { device_id, accident_type, occurred_at }
             db.query(
                 'INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
-                [data.device_id, data.accident_type, data.occurred_at || new Date()],
+                [data.device_id, data.accident_type, data.occurred_at || timestamp],
                 (err) => { if (err) console.error('DB insert error (accident):', err); }
             );
         }
@@ -146,15 +148,6 @@ mqttClient.on('message', (topic, message) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
