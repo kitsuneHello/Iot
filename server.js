@@ -114,10 +114,10 @@ mqttClient.on('connect', () => {
 
 // MQTTメッセージ受信
 mqttClient.on('message', (topic, message) => {
+    console.log(`[DEBUG] Topic: ${topic}, Message: ${message.toString()}`);
     try {
         const data = JSON.parse(message.toString());
         const timestamp = data.measured_at ? new Date(data.measured_at) : new Date();
-        console.log(data)
         if (topic === 'elevator/congestion') {
             //混雑度を受信
             // { device_id, congestion_level, measured_at }
