@@ -1,341 +1,135 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
-    <title>エレベーター管理システム</title>
-    <link rel="icon" type="image/png" href="img/favicon.png">
+    <title>Elevator Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
-        body {
-            font-family: sans-serif;
-            margin: 20px;
-        }
-
-        h2 {
-            margin-top: 30px;
-        }
-
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 20px;
-        }
-
-        th,
-        td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: center;
-        }
-
-        th {
-            background: #f0f0f0;
-        }
-
-        .realtime {
-            display: flex;
-            gap: 40px;
-        }
-
-        .realtime>div {
-            flex: 1;
-        }
-
-        .download-btn {
-            margin-bottom: 10px;
-        }
-
-        .scrollable-table {
-            max-height: 500px;
-            overflow-y: auto;
-        }
-
-        /* グラフの最小高さを確保（レスポンシブ時の見栄え向上） */
-        canvas {
-            min-height: 220px;
-        }
+        body { font-family: sans-serif; margin: 20px; }
+        .dashboard { display: flex; gap: 20px; flex-wrap: wrap;}
+        .card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; flex: 1; min-width: 300px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #eee; padding: 8px; text-align: center; }
+        th { background: #f8f9fa; }
+        .chart-container { position: relative; height: 300px; width: 100%; margin-top: 20px;}
     </style>
 </head>
-
 <body>
     <h1>エレベーター管理システム</h1>
-    <h2>リアルタイム情報</h2>
-    <div class="realtime">
-        <div>
-            <h3>各階の最新混雑度</h3>
-            <div class="scrollable-table">
-                <table id="congestion-table">
-                    <thead>
-                        <tr>
-                            <th>階</th>
-                            <th>混雑度</th>
-                            <th>時刻</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+    
+    <div class="dashboard">
+        <div class="card">
+            <h3>現在の混雑度</h3>
+            <table id="congestionTable">
+                <thead><tr><th>階/ID</th><th>レベル</th><th>更新時刻</th></tr></thead>
+                <tbody></tbody>
+            </table>
         </div>
-        <div>
-            <h3>最新エレベーター環境</h3>
-            <div class="scrollable-table">
-                <table id="env-table">
-                    <thead>
-                        <tr>
-                            <th>デバイス</th>
-                            <th>気圧</th>
-                            <th>温度</th>
-                            <th>湿度</th>
-                            <th>時刻</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+        <div class="card">
+            <h3>現在の環境</h3>
+            <table id="envTable">
+                <thead><tr><th>ID</th><th>温度</th><th>湿度</th><th>気圧</th></tr></thead>
+                <tbody></tbody>
+            </table>
         </div>
     </div>
 
-    <h2>過去データ</h2>
+    <h2>過去データ分析</h2>
     <div>
-        <button class="download-btn" onclick="downloadCSV()">CSVダウンロード</button>
-        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-            <div style="flex:1; min-width:300px;">
-                <h4>混雑度</h4>
-                <canvas id="congestionChart" height="220"></canvas>
-            </div>
-            <div style="flex:1; min-width:300px;">
-                <h4>気圧</h4>
-                <canvas id="pressureChart" height="220"></canvas>
-            </div>
-            <div style="flex:1; min-width:300px;">
-                <h4>温度</h4>
-                <canvas id="tempChart" height="220"></canvas>
-            </div>
-            <div style="flex:1; min-width:300px;">
-                <h4>湿度</h4>
-                <canvas id="humChart" height="220"></canvas>
-            </div>
-            <div style="flex:1; min-width:300px;">
-                <h4>事故情報</h4>
-                <canvas id="accidentChart" height="220"></canvas>
-            </div>
-        </div>
-        <div style="margin: 10px 0;">
-            <label>表示範囲:
-                <select id="rangeSelect" onchange="fetchHistory()">
-                    <option value="day">日</option>
-                    <option value="week">週</option>
-                    <option value="month">月</option>
-                    <option value="all">全期間</option>
-                </select>
-                <input type="date" id="dateInput" value="" onchange="fetchHistory()">
-            </label>
-        </div>
-        <div id="tableArea">
-            <h4>混雑度</h4>
-            <div id="congestionTableContainer" class="scrollable-table"></div>
-            <h4>環境データ</h4>
-            <div id="environmentTableContainer" class="scrollable-table"></div>
-            <h4>事故情報</h4>
-            <div id="accidentTableContainer" class="scrollable-table"></div>
-        </div>
+        <select id="rangeSelect" onchange="fetchHistory()">
+            <option value="day">今日 (詳細)</option>
+            <option value="week">今週 (1時間平均)</option>
+            <option value="month">今月 (5分平均)</option>
+        </select>
+        <input type="date" id="dateInput" onchange="fetchHistory()">
+    </div>
+
+    <div class="chart-container">
+        <canvas id="mainChart"></canvas>
     </div>
 
     <script>
-        // 日時をISO8601に変換
-        function toISO(dt) {
-            return dt ? dt.replace(' ', 'T') : dt;
-        }
+        // 初期設定
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        let mainChart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'time', time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } } },
+                    y: { beginAtZero: true }
+                },
+                interaction: { mode: 'nearest', intersect: false }
+            }
+        });
 
-        // 色を生成（インデックスから一巡する HSL ベース）
-        function getColor(i) {
-            const hue = (i * 45) % 360;
-            return `hsl(${hue} 75% 45%)`;
-        }
+        // 今日の日付をセット
+        document.getElementById('dateInput').valueAsDate = new Date();
 
         // リアルタイムデータ取得
         async function fetchRealtime() {
-            const [congestion, env] = await Promise.all([
-                fetch('/api/congestion/latest').then(r => r.json()),
-                fetch('/api/environment/latest').then(r => r.json())
-            ]);
+            try {
+                const [congRes, envRes] = await Promise.all([
+                    fetch('/api/congestion/latest'),
+                    fetch('/api/environment/latest')
+                ]);
+                const congData = await congRes.json();
+                const envData = await envRes.json();
 
-            // 混雑度
-            const ct = document.querySelector('#congestion-table tbody');
-            ct.innerHTML = congestion.map(row => `<tr><td>${row.floor_number}</td><td>${row.congestion_level}</td><td>${row.measured_at}</td></tr>`).join('');
-            document.querySelector('#congestion-table').parentElement.classList.toggle('scrollable-table', congestion.length > 30);
+                // 混雑度テーブル更新
+                const cTbody = document.querySelector('#congestionTable tbody');
+                cTbody.innerHTML = congData.map(d => 
+                    `<tr><td>${d.floor_number || d.device_id}</td><td>${d.congestion_level}</td><td>${new Date(d.measured_at).toLocaleTimeString()}</td></tr>`
+                ).join('');
 
-            // 環境
-            const et = document.querySelector('#env-table tbody');
-            et.innerHTML = env.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
-            document.querySelector('#env-table').parentElement.classList.toggle('scrollable-table', env.length > 30);
+                // 環境テーブル更新
+                const eTbody = document.querySelector('#envTable tbody');
+                eTbody.innerHTML = envData.map(d => 
+                    `<tr><td>${d.device_id}</td><td>${d.temperature.toFixed(1)}℃</td><td>${d.humidity.toFixed(1)}%</td><td>${d.pressure.toFixed(0)}hPa</td></tr>`
+                ).join('');
+            } catch(e) { console.error(e); }
         }
 
-        // グラフの初期化
-        let congestionChart, pressureChart, tempChart, humChart, accidentChart;
-
-        function initCharts() {
-            const ctxCongestion = document.getElementById('congestionChart').getContext('2d');
-            const ctxPressure = document.getElementById('pressureChart').getContext('2d');
-            const ctxTemp = document.getElementById('tempChart').getContext('2d');
-            const ctxHum = document.getElementById('humChart').getContext('2d');
-            const ctxAccident = document.getElementById('accidentChart').getContext('2d');
-
-            // 混雑度チャート: datasets は fetchHistory で階ごとに作成するため初期は空にする
-            congestionChart = new Chart(ctxCongestion, {
-                type: 'line',
-                data: { labels: [], datasets: [] },
-                options: {
-                    responsive: true,
-                    // parsing を指定しない（デフォルトのパースを使う）
-                    scales: {
-                        x: { type: 'time' },
-                        y: {
-                            min: 0,
-                            max: 1,
-                            beginAtZero: true,
-                            ticks: { stepSize: 0.1 }
-                        }
-                    },
-                    plugins: { legend: { position: 'top' } }
-                }
-            });
-
-            pressureChart = new Chart(ctxPressure, {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: '気圧', data: [], borderColor: 'green', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
-            });
-
-            tempChart = new Chart(ctxTemp, {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: '温度', data: [], borderColor: 'red', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
-            });
-
-            humChart = new Chart(ctxHum, {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: '湿度', data: [], borderColor: 'purple', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
-            });
-
-            accidentChart = new Chart(ctxAccident, {
-                type: 'bar',
-                data: { labels: [], datasets: [{ label: '事故件数', data: [], backgroundColor: 'orange' }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
-            });
-        }
-
-        // 過去データ取得
-        async function fetchHistory(page = 1) {
+        // 履歴データ取得とグラフ描画
+        async function fetchHistory() {
             const range = document.getElementById('rangeSelect').value;
             const date = document.getElementById('dateInput').value;
-            let url = `/api/history?page=${page}`;
-            if (range && date) {
-                url += `&range=${range}&date=${date}`;
-            }
-            const res = await fetch(url);
-            const result = await res.json();
-            const data = result.data;
+            const res = await fetch(`/api/history?range=${range}&date=${date}`);
+            const json = await res.json();
+            const data = json.data;
 
-            // 混雑度
-            const congestion = data.filter(row => row.congestion_level !== undefined && row.congestion_level !== null);
-            const congestionHtml = `<table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>` +
-                congestion.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level || ''}</td><td>${row.measured_at}</td></tr>`).join('') +
-                `</tbody></table>`;
-            document.getElementById('congestionTableContainer').innerHTML = congestionHtml;
-            document.getElementById('congestionTableContainer').classList.toggle('scrollable-table', congestion.length > 30);
+            // データセットを作成
+            const datasets = [];
 
-            // 環境データ
-            const environment = data.filter(row => row.pressure !== undefined && row.pressure !== null);
-            const environmentHtml = `<table><thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>` +
-                environment.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('') +
-                `</tbody></table>`;
-            document.getElementById('environmentTableContainer').innerHTML = environmentHtml;
-            document.getElementById('environmentTableContainer').classList.toggle('scrollable-table', environment.length > 30);
-
-            // 事故情報
-            const accidentTable = data.filter(row => row.accident_type !== undefined && row.accident_type !== null);
-            const accidentHtml = `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th><th>解決</th></tr></thead><tbody>` +
-                accidentTable.map(row => `<tr><td>${row.device_id}</td><td>${row.accident_type}</td><td>${row.occurred_at}</td><td>${row.is_resolved ? '済' : '未'}</td></tr>`).join('') +
-                `</tbody></table>`;
-            document.getElementById('accidentTableContainer').innerHTML = accidentHtml;
-            document.getElementById('accidentTableContainer').classList.toggle('scrollable-table', accidentTable.length > 30);
-
-            // グラフデータ更新
-            // 階ごとにグループ化して datasets を作成（floor_number または device_id をキーに）
-            const keyGetter = r => (r.floor_number !== undefined && r.floor_number !== null) ? `階 ${r.floor_number}` : (r.device_id || 'unknown');
-            const groups = {};
-            congestion.forEach(r => {
-                const k = keyGetter(r);
-                groups[k] = groups[k] || [];
-                groups[k].push(r);
+            // 1. 混雑度
+            const congData = data.filter(d => d.congestion_level !== null);
+            datasets.push({
+                label: '混雑度',
+                data: congData.map(d => ({x: d.measured_at, y: d.congestion_level})),
+                borderColor: 'rgb(255, 99, 132)',
+                yAxisID: 'y'
             });
-            const datasets = Object.keys(groups).map((k, idx) => {
-                const points = groups[k]
-                    .map(r => ({ x: toISO(r.measured_at), y: Number(r.congestion_level) }))
-                    .sort((a, b) => new Date(a.x) - new Date(b.x));
-                const color = getColor(idx);
-                return {
-                    label: k,
-                    data: points,
-                    borderColor: color,
-                    backgroundColor: color,
-                    spanGaps: true,
-                    tension: 0.2,
-                    fill: false,
-                    borderWidth: 2,
-                    pointRadius: 2
-                };
+
+            // 2. 温度
+            const tempData = data.filter(d => d.temperature !== null);
+            datasets.push({
+                label: '温度 (℃)',
+                data: tempData.map(d => ({x: d.measured_at, y: d.temperature})),
+                borderColor: 'rgb(54, 162, 235)',
+                yAxisID: 'y'
             });
-            congestionChart.data.datasets = datasets;
-            congestionChart.update();
-
-            pressureChart.data.labels = environment.map(row => row.measured_at);
-            pressureChart.data.datasets[0].data = environment.map(row => row.pressure);
-            pressureChart.update();
-
-            tempChart.data.labels = environment.map(row => row.measured_at);
-            tempChart.data.datasets[0].data = environment.map(row => row.temperature);
-            tempChart.update();
-
-            humChart.data.labels = environment.map(row => row.measured_at);
-            humChart.data.datasets[0].data = environment.map(row => row.humidity);
-            humChart.update();
-
-            accidentChart.data.labels = accidentTable.map(row => row.occurred_at);
-            accidentChart.data.datasets[0].data = accidentTable.map(row => 1); // 件数を1でカウント
-            accidentChart.update();
+            
+            mainChart.data.datasets = datasets;
+            mainChart.update();
         }
-        // CSVダウンロード
-        async function downloadCSV() {
-            const result = await fetch('/api/history').then(r => r.json());
-            const data = result.data || result; // 互換
-            let csv = '階/デバイス,混雑度,気圧,温度,湿度,時刻\n';
-            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.pressure || ''},${row.temperature || ''},${row.humidity || ''},${row.measured_at}`).join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'history.csv';
-            a.click();
-        }
-        // 初期ロード
-        // 今日の日付をデフォルトでセット
-        window.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('rangeSelect').value = 'day';
-            const today = new Date();
-            const yyyy = today.getFullYear();
-            const mm = String(today.getMonth() + 1).padStart(2, '0');
-            const dd = String(today.getDate()).padStart(2, '0');
-            document.getElementById('dateInput').value = `${yyyy}-${mm}-${dd}`;
-            initCharts();
-            fetchRealtime();
-            fetchHistory();
-            setInterval(fetchRealtime, 5000);
-        });
+
+        // 定期実行
+        fetchRealtime();
+        fetchHistory();
+        setInterval(fetchRealtime, 5000); // 5秒ごとに更新
     </script>
 </body>
-
 </html>
