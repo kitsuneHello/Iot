@@ -20,7 +20,7 @@ db.connect((err) => {
 });
 
 // MQTT接続
-const mqttClient = mqtt.connect('mqtt://127.0.0.1:1883');
+const mqttClient = mqtt.connect('mqtt://52.71.214.40:1883');
 
 // API例
 app.get('/api/congestion', (req, res) => {
