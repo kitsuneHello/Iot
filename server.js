@@ -19,8 +19,6 @@ db.connect((err) => {
     }
 });
 
-// MQTT接続
-const mqttClient = mqtt.connect('mqtt://localhost:1883');
 
 // API例
 app.get('/api/congestion', (req, res) => {
@@ -97,17 +95,40 @@ app.get('/', (req, res) => {
 });
 
 
-// MQTTサブスクライブ
+
+// MQTT接続
+const mqttClient = mqtt.connect('mqtt://localhost:1883');
+
+// MQTT接続成功時の処理
 mqttClient.on('connect', () => {
-    console.log('Connected to MQTT broker');
-    mqttClient.subscribe(['elevator/congestion', 'elevator/environment', 'elevator/accident'], (err) => {
-        if (err) {
-            console.error('MQTT subscribe error:', err);
-        } else {
-            console.log('Subscribed to elevator topics');
-        }
-    });
+    console.log('Connected to Mosquitto');
+    mqttClient.subscribe(['elevator/congestion', 'elevator/environment', 'elevator/accident']);
 });
+
+// MQTTメッセージ受信処理
+mqttClient.on('message', (topic, message) => {
+    try {
+        const data = JSON.parse(message.toString());
+        // M5Stackから時刻が来なければ現在時刻を使う
+        const timestamp = data.measured_at ? new Date(data.measured_at) : new Date();
+
+        if (topic === 'elevator/congestion') {
+            db.query('INSERT INTO congestion_logs (device_id, congestion_level, measured_at) VALUES (?, ?, ?)',
+                [data.device_id, data.congestion_level, timestamp]);
+        } 
+        else if (topic === 'elevator/environment') {
+            db.query('INSERT INTO environment_logs (device_id, pressure, temperature, humidity, measured_at) VALUES (?, ?, ?, ?, ?)',
+                [data.device_id, data.pressure, data.temperature, data.humidity, timestamp]);
+        } 
+        else if (topic === 'elevator/accident') {
+            db.query('INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
+                [data.device_id, data.accident_type, timestamp]);
+        }
+    } catch (e) {
+        console.error('MQTT Parse Error:', e);
+    }
+});
+
 
 // MQTTメッセージ受信
 mqttClient.on('message', (topic, message) => {
