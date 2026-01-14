@@ -55,6 +55,11 @@ mqttClient.on('message', (topic, message) => {
 
 app.use(express.static('web')); // webフォルダを公開
 
+// ルートアクセス時に home.html を返す
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'web', 'home.html'));
+});
+
 // 最新の混雑度
 app.get('/api/congestion/latest', (req, res) => {
     const sql = `
