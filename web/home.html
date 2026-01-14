@@ -183,13 +183,18 @@
             const ctxHum = document.getElementById('humChart').getContext('2d');
             const ctxAccident = document.getElementById('accidentChart').getContext('2d');
 
-            // 混雑度チャート: datasets は fetchHistory で階ごとに作成するため初期は空にする
+            // 24時間表記ツールチップタイトル
+            function tooltipTitle24Hour(items) {
+                const v = items[0].parsed.x || items[0].label;
+                const d = new Date(v);
+                return d.toLocaleString('ja-JP', { hour12: false });
+            }
+
             congestionChart = new Chart(ctxCongestion, {
                 type: 'line',
                 data: { labels: [], datasets: [] },
                 options: {
                     responsive: true,
-                    // parsing を指定しない（デフォルトのパースを使う）
                     scales: {
                         x: { type: 'time' },
                         y: {
@@ -199,32 +204,79 @@
                             ticks: { stepSize: 0.1 }
                         }
                     },
-                    plugins: { legend: { position: 'top' } }
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                title: tooltipTitle24Hour
+                            }
+                        }
+                    }
                 }
             });
 
             pressureChart = new Chart(ctxPressure, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '気圧', data: [], borderColor: 'green', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: {
+                    responsive: true,
+                    scales: { x: { type: 'time' }, y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: tooltipTitle24Hour
+                            }
+                        }
+                    }
+                }
             });
 
             tempChart = new Chart(ctxTemp, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '温度', data: [], borderColor: 'red', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: {
+                    responsive: true,
+                    scales: { x: { type: 'time' }, y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: tooltipTitle24Hour
+                            }
+                        }
+                    }
+                }
             });
 
             humChart = new Chart(ctxHum, {
                 type: 'line',
                 data: { labels: [], datasets: [{ label: '湿度', data: [], borderColor: 'purple', fill: false }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: {
+                    responsive: true,
+                    scales: { x: { type: 'time' }, y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: tooltipTitle24Hour
+                            }
+                        }
+                    }
+                }
             });
 
             accidentChart = new Chart(ctxAccident, {
                 type: 'bar',
                 data: { labels: [], datasets: [{ label: '事故件数', data: [], backgroundColor: 'orange' }] },
-                options: { responsive: true, scales: { x: { type: 'time' }, y: { beginAtZero: true } } }
+                options: {
+                    responsive: true,
+                    scales: { x: { type: 'time' }, y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: tooltipTitle24Hour
+                            }
+                        }
+                    }
+                }
             });
         }
 
