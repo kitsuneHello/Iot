@@ -229,12 +229,12 @@
         }
 
         // 過去データ取得
-        async function fetchHistory(page = 1) {
+        async function fetchHistory() {
             const range = document.getElementById('rangeSelect').value;
             const date = document.getElementById('dateInput').value;
-            let url = `/api/history?page=${page}`;
+            let url = `/api/history`;
             if (range && date) {
-                url += `&range=${range}&date=${date}`;
+                url += `?range=${range}&date=${date}`;
             }
             const res = await fetch(url);
             const result = await res.json();

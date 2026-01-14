@@ -60,143 +60,29 @@ app.get('/api/environment/latest', (req, res) => {
 
 // 過去データ（混雑度・環境・事故のみ）
 app.get('/api/history', (req, res) => {
-    let { range, date, page = 1 } = req.query;
-    page = parseInt(page) || 1;
-    const pageSize = 30;
-    const offset = (page - 1) * pageSize;
-
+    let { range, date } = req.query;
     let where = '';
     let params = [];
-    let interval = 0;
-
-    // 1. 期間と集計間隔の設定（コメントの意図に合わせて修正）
     if (range && date) {
         if (range === 'day') {
             where = 'WHERE DATE(measured_at) = ?';
             params.push(date);
-            interval = 0; // そのまま
         } else if (range === 'week') {
             where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
             params.push(date);
-            interval = 3600; // 1時間ごと (週表示なら粗く) ※元のコードは逆に設定されていました
         } else if (range === 'month') {
             where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
             params.push(date);
-            interval = 86400; // 1日ごと (月表示なら日別)
-        } else if (range === 'all') {
-            where = ''; // 全期間
-            interval = 2592000; // 30日ごと（など、さらに粗くする）
         }
-    } else {
-        // デフォルト動作（指定がない場合など）
-        range = 'day';
-        where = 'WHERE DATE(measured_at) = CURDATE()'; // 例
-        interval = 0;
     }
 
-    // 時間丸め用関数
-    const getTimeCol = (colName) => {
-        if (interval > 0) {
-            return `FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(${colName})/${interval})*${interval})`;
-        }
-        return colName;
-    };
-
-    const getGroupBy = (alias) => {
-        if (interval > 0) {
-            return `GROUP BY ${alias}.device_id, FLOOR(UNIX_TIMESTAMP(${alias}.measured_at)/${interval})`;
-        }
-        return `GROUP BY ${alias}.device_id, ${alias}.measured_at`;
-    };
-
-    // 2. SQL構築
-    // UNION ALLのカラム数と型を合わせ、最後にまとめてORDER BYとLIMITをかける構造に変更
-
-    // 混雑度 (Congestion)
-    const congestionSql = `
-        SELECT 
-            d.floor_number, 
-            c.device_id, 
-            AVG(c.congestion_level) AS congestion_level, 
-            ${getTimeCol('c.measured_at')} AS measured_at, 
-            NULL AS pressure, 
-            NULL AS temperature, 
-            NULL AS humidity, 
-            NULL AS accident_type, 
-            'congestion' AS data_type
-        FROM congestion_logs c 
-        JOIN devices d ON c.device_id = d.device_id 
-        ${where} 
-        ${getGroupBy('c')}
-    `;
-
-    // 環境 (Environment)
-    const envSql = `
-        SELECT 
-            NULL AS floor_number, 
-            e.device_id, 
-            NULL AS congestion_level, 
-            ${getTimeCol('e.measured_at')} AS measured_at, 
-            AVG(e.pressure) AS pressure, 
-            AVG(e.temperature) AS temperature, 
-            AVG(e.humidity) AS humidity, 
-            NULL AS accident_type, 
-            'environment' AS data_type
-        FROM environment_logs e 
-        ${where} 
-        ${getGroupBy('e')}
-    `;
-
-    // 事故 (Accident) - 事故は平均化せず、発生時刻そのまま、またはカウントなどを検討するが、ここでは単純に表示
-    // ※ accident_logs は measured_at ではなく occurred_at を持つため置換
-    const accidentWhere = where.replace(/measured_at/g, 'occurred_at');
-    const accidentSql = `
-        SELECT 
-            NULL AS floor_number, 
-            a.device_id, 
-            NULL AS congestion_level, 
-            a.occurred_at AS measured_at, 
-            NULL AS pressure, 
-            NULL AS temperature, 
-            NULL AS humidity, 
-            a.accident_type, 
-            'accident' AS data_type
-        FROM accident_logs a 
-        ${accidentWhere}
-        -- 事故はGROUP BYしない（単発イベントのため）
-    `;
-
-    // 全体を包むSQL（ソートとページネーション用）
-    const finalSql = `
-        SELECT * FROM (
-            ${congestionSql}
-            UNION ALL
-            ${envSql}
-            UNION ALL
-            ${accidentSql}
-        ) AS combined_table
-        ORDER BY measured_at DESC
-        LIMIT ? OFFSET ?
-    `;
-
-    // パラメータの結合: 各SELECT句のparams + LIMIT/OFFSET用
-    // range='all'の場合はparamsが空になる点に注意
-    const queryParams = [...params, ...params, ...params, pageSize, offset];
-
-    db.query(finalSql, queryParams, (err, results) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).send('DB Error');
-        }
-        
-        // 注意: 正確なtotalPagesを出すには別途COUNT(*)クエリが必要ですが、
-        // パフォーマンスを考慮して簡易的に返すか、別途実装が必要です。
-        res.json({ 
-            data: results, 
-            page: page,
-            limit: pageSize
-            // totalPages: ... (別途計算が必要)
-        });
+    const congestionSql = `(SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, c.measured_at AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} GROUP BY c.device_id, measured_at ORDER BY measured_at DESC)`;
+    const envSql = `(SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.pressure, e.temperature, e.humidity, NULL AS accident_type, NULL AS occurred_at FROM environment_logs e ${where} ORDER BY e.measured_at DESC)`;
+    const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC)`;
+    const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql}`;
+    db.query(unionSql, [...params, ...params, ...params], (err, results) => {
+        if (err) return res.status(500).send('DB Error');
+        res.json({ data: results, totalPages: 1 });
     });
 });
 
