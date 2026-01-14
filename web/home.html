@@ -309,7 +309,7 @@
             document.getElementById('environmentTableContainer').classList.toggle('scrollable-table', environment.length > 30);
 
             // 事故情報
-            const accidentTable = data.filter(row => row.accident_type !== undefined && row.accident_type !== null);
+            const accidentTable = data.filter(row => row.accident_type !== undefined && row.accident_type !== null && row.occurred_at);
             const accidentHtml = `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead><tbody>` +
                 accidentTable.map(row => `<tr><td>${row.device_id}</td><td>${row.accident_type}</td><td>${row.occurred_at}</td></tr>`).join('') +
                 `</tbody></table>`;
@@ -358,7 +358,7 @@
             humChart.update();
 
             accidentChart.data.labels = accidentTable.map(row => row.occurred_at);
-            accidentChart.data.datasets[0].data = accidentTable.map(row => 1); // 件数を1でカウント
+            accidentChart.data.datasets[0].data = accidentTable.map(() => 1); // 件数を1でカウント
             accidentChart.update();
 
             // --- x軸範囲・目盛り設定 ---
