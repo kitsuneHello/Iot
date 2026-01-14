@@ -360,6 +360,113 @@
             accidentChart.data.labels = accidentTable.map(row => row.occurred_at);
             accidentChart.data.datasets[0].data = accidentTable.map(row => 1); // 件数を1でカウント
             accidentChart.update();
+
+            // --- x軸範囲・目盛り設定 ---
+            let xMin = null, xMax = null, xTicks = {};
+            if (range === 'day') {
+                // その日の00:00～23:59、24分割
+                const d = date ? new Date(date) : new Date();
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                xMin = `${yyyy}-${mm}-${dd}T00:00:00`;
+                xMax = `${yyyy}-${mm}-${dd}T23:59:59`;
+                xTicks = {
+                    stepSize: 1,
+                    source: 'auto',
+                    autoSkip: false,
+                    maxTicksLimit: 24,
+                    callback: function(value, index, ticks) {
+                        // 0時, 6時, 12時, 18時, 23時だけラベル
+                        const hour = new Date(value).getHours();
+                        return [0, 6, 12, 18, 23].includes(hour) ? `${hour}:00` : '';
+                    }
+                };
+            } else if (range === 'week') {
+                // 日曜00:00～金曜23:59、7分割
+                const d = date ? new Date(date) : new Date();
+                // 日曜取得
+                const day = d.getDay();
+                const sunday = new Date(d);
+                sunday.setDate(d.getDate() - day);
+                const friday = new Date(sunday);
+                friday.setDate(sunday.getDate() + 6);
+                const yyyyS = sunday.getFullYear(), mmS = String(sunday.getMonth() + 1).padStart(2, '0'), ddS = String(sunday.getDate()).padStart(2, '0');
+                const yyyyF = friday.getFullYear(), mmF = String(friday.getMonth() + 1).padStart(2, '0'), ddF = String(friday.getDate()).padStart(2, '0');
+                xMin = `${yyyyS}-${mmS}-${ddS}T00:00:00`;
+                xMax = `${yyyyF}-${mmF}-${ddF}T23:59:59`;
+                xTicks = {
+                    stepSize: 1,
+                    source: 'auto',
+                    autoSkip: false,
+                    maxTicksLimit: 7,
+                    callback: function(value, index, ticks) {
+                        // 日付ラベル
+                        const d = new Date(value);
+                        return `${d.getMonth() + 1}/${d.getDate()}`;
+                    }
+                };
+            } else if (range === 'month') {
+                // 1日0:00～月末23:59、10分割
+                const d = date ? new Date(date) : new Date();
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const first = `${yyyy}-${mm}-01T00:00:00`;
+                // 月末日取得
+                const lastDate = new Date(yyyy, d.getMonth() + 1, 0).getDate();
+                const last = `${yyyy}-${mm}-${String(lastDate).padStart(2, '0')}T23:59:59`;
+                xMin = first;
+                xMax = last;
+                xTicks = {
+                    stepSize: 1,
+                    source: 'auto',
+                    autoSkip: false,
+                    maxTicksLimit: 10,
+                    callback: function(value, index, ticks) {
+                        // 10分割
+                        const d = new Date(value);
+                        return `${d.getMonth() + 1}/${d.getDate()}`;
+                    }
+                };
+            } else if (range === 'all') {
+                // データ範囲、5分割、下に日にち
+                let allDates = data
+                    .map(row => row.measured_at)
+                    .filter(Boolean)
+                    .map(d => new Date(d))
+                    .sort((a, b) => a - b);
+                if (allDates.length === 0) {
+                    xMin = null; xMax = null;
+                } else {
+                    xMin = allDates[0].toISOString();
+                    xMax = allDates[allDates.length - 1].toISOString();
+                }
+                xTicks = {
+                    stepSize: 1,
+                    source: 'auto',
+                    autoSkip: false,
+                    maxTicksLimit: 5,
+                    callback: function(value, index, ticks) {
+                        // 日付のみ
+                        const d = new Date(value);
+                        return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+                    }
+                };
+            }
+
+            // x軸設定を全グラフに適用
+            function setXOptions(chart) {
+                if (!chart) return;
+                chart.options.scales.x.min = xMin || undefined;
+                chart.options.scales.x.max = xMax || undefined;
+                chart.options.scales.x.ticks = xTicks;
+                chart.update();
+            }
+            setXOptions(congestionChart);
+            setXOptions(pressureChart);
+            setXOptions(tempChart);
+            setXOptions(humChart);
+            setXOptions(accidentChart);
         }
         // CSVダウンロード
         async function downloadCSV() {
