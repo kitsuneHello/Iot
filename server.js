@@ -20,7 +20,7 @@ db.connect((err) => {
 
 // --- MQTT接続設定 ---
 // Node.jsは同じサーバー上のMosquittoを見るため localhost でOK
-const mqttClient = mqtt.connect('mqtt://52.71.214.40:1883');
+const mqttClient = mqtt.connect('mqtt://localhost:1883');
 
 mqttClient.on('connect', () => {
     console.log('Connected to Mosquitto');
