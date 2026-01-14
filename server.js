@@ -99,17 +99,16 @@ app.get('/api/history', (req, res) => {
     const { range, date } = req.query;
     let whereClause = '';
     let params = [];
-    
     // 期間に応じたSQLのWHERE句作成
     if (range === 'day' && date) {
         whereClause = 'WHERE DATE(measured_at) = ?';
-        params = [date, date, date];
+        params = [date, date, date, date];
     } else if (range === 'week' && date) {
         whereClause = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
-        params = [date, date, date];
+        params = [date, date, date, date];
     } else if (range === 'month' && date) {
         whereClause = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-        params = [date, date, date];
+        params = [date, date, date, date];
     }
 
     // ★重要: 表示範囲が広い場合はデータを「5分平均」等にして軽量化する
@@ -151,12 +150,25 @@ app.get('/api/history', (req, res) => {
     )`;
 
     // 事故SQL (間引きしない。事故は重大なので全て出す)
+    // 他のサブクエリと同じ?の数にするため、WHERE句の?を揃える
+    let accidentWhereClause = whereClause.replace(/measured_at/g, 'occurred_at');
+    // ?の数が3つ→4つになるよう調整（WHERE句が空なら?をダミーで追加）
+    if (accidentWhereClause) {
+        // 既存の?の数を数える
+        const qCount = (accidentWhereClause.match(/\?/g) || []).length;
+        if (qCount < 4) {
+            // 4つに揃える
+            accidentWhereClause = accidentWhereClause.replace(/$/, ' AND 1=1'.repeat(4 - qCount));
+        }
+    } else {
+        accidentWhereClause = 'WHERE 1=1 AND 1=1 AND 1=1 AND 1=1';
+    }
     const accidentSql = `(SELECT 
         a.device_id, NULL as congestion_level, 
         DATE_FORMAT(a.occurred_at, '%Y-%m-%d %H:%i:%s') as measured_at,
         NULL as pressure, NULL as temperature, NULL as humidity, a.accident_type
         FROM accident_logs a 
-        ${whereClause.replace(/measured_at/g, 'occurred_at')}
+        ${accidentWhereClause}
     )`;
 
     const finalSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql} ORDER BY measured_at ASC`;
