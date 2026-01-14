@@ -243,7 +243,7 @@
             // 混雑度
             const congestion = data.filter(row => row.congestion_level !== undefined && row.congestion_level !== null);
             const congestionHtml = `<table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>` +
-                congestion.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level !== undefined && row.congestion_level !== null ? row.congestion_level : ''}</td><td>${row.measured_at}</td></tr>`).join('') +
+                congestion.map(row => `<tr><td>${row.device_id || row.floor_number}</td><td>${row.congestion_level !== undefined && row.congestion_level !== null ? Number(row.congestion_level).toFixed(2) : ''}</td><td>${row.measured_at}</td></tr>`).join('') +
                 `</tbody></table>`;
             document.getElementById('congestionTableContainer').innerHTML = congestionHtml;
             document.getElementById('congestionTableContainer').classList.toggle('scrollable-table', congestion.length > 30);
@@ -251,7 +251,7 @@
             // 環境データ
             const environment = data.filter(row => row.pressure !== undefined && row.pressure !== null);
             const environmentHtml = `<table><thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>` +
-                environment.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('') +
+                environment.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure !== undefined && row.pressure !== null ? Number(row.pressure).toFixed(2) : ''}</td><td>${row.temperature !== undefined && row.temperature !== null ? Number(row.temperature).toFixed(2) : ''}</td><td>${row.humidity !== undefined && row.humidity !== null ? Number(row.humidity).toFixed(2) : ''}</td><td>${row.measured_at}</td></tr>`).join('') +
                 `</tbody></table>`;
             document.getElementById('environmentTableContainer').innerHTML = environmentHtml;
             document.getElementById('environmentTableContainer').classList.toggle('scrollable-table', environment.length > 30);
