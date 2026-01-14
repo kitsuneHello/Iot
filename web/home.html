@@ -278,7 +278,14 @@
                     plugins: {
                         tooltip: {
                             callbacks: {
-                                title: tooltipTitle24Hour
+                                title: tooltipTitle24Hour,
+                                label: function(context) {
+                                    // 事故種別を追加表示
+                                    const accidentTable = context.chart.data.datasets[0].accidentTable || [];
+                                    const idx = context.dataIndex;
+                                    const type = accidentTable[idx] && accidentTable[idx].accident_type ? accidentTable[idx].accident_type : '';
+                                    return type ? `事故種別: ${type}` : '';
+                                }
                             }
                         }
                     }
@@ -368,6 +375,8 @@
                 x: toISO(row.occurred_at),
                 y: 1
             }));
+            // 事故種別参照用にデータもセット
+            accidentChart.data.datasets[0].accidentTable = accidentTable;
             accidentChart.update();
 
             // --- x軸範囲・目盛り設定 ---
