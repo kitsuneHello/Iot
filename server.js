@@ -66,32 +66,23 @@ app.get('/api/history', (req, res) => {
     let where = '';
     let params = [];
     let interval = 0;
-    if (range && date) {
-        if (range === 'day') {
-            where = 'WHERE DATE(measured_at) = ?';
-            params.push(date);
-            interval = 0;
-        } else if (range === 'week') {
-            where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
-            params.push(date);
-            interval = 3600; // 1時間
-        } else if (range === 'month') {
-            where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            params.push(date);
-            interval = 300; // 5分
-        } else if (range === 'all') {
-            where = '';
-            interval = 300; // 5分
-        }
+    if (range === 'day' && date) {
+        where = 'WHERE DATE(measured_at) = ?';
+        params.push(date);
+        interval = 0;
+    } else if (range === 'week' && date) {
+        where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
+        params.push(date);
+        interval = 300; // 5分
+    } else if (range === 'month' && date) {
+        where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+        params.push(date);
+        interval = 3600; // 1時間
+    } else if (range === 'all') {
+        where = '';
+        interval = 86400; // 1日
     }
 
-    // 時間丸め用SQL
-    /*
-    日：平均化なし（全データ）
-    週：5分ごと
-    月：1時間ごと
-    全期間：1日ごと
-    */
     let timeGroup = 'measured_at';
     let groupBy = '';
     if (interval > 0) {
@@ -103,10 +94,11 @@ app.get('/api/history', (req, res) => {
 
     const congestionSql = `(SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, ${interval > 0 ? `DATE_FORMAT(${timeGroup}, '%Y-%m-%d %H:%i:%s')` : 'c.measured_at'} AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at FROM congestion_logs c JOIN devices d ON c.device_id = d.device_id ${where} ${groupBy} ORDER BY measured_at DESC)`;
     const envSql = `(SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, ${interval > 0 ? `DATE_FORMAT(${timeGroup}, '%Y-%m-%d %H:%i:%s')` : 'e.measured_at'} AS measured_at, AVG(e.pressure) AS pressure, AVG(e.temperature) AS temperature, AVG(e.humidity) AS humidity, NULL AS accident_type, NULL AS occurred_at FROM environment_logs e ${where} ${interval > 0 ? `GROUP BY e.device_id, FLOOR(UNIX_TIMESTAMP(measured_at)/${interval})` : 'GROUP BY e.device_id, measured_at'} ORDER BY measured_at DESC)`;
-    const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at FROM accident_logs a ${where.replace(/measured_at/g, 'occurred_at')} ORDER BY a.occurred_at DESC)`;
+    const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at FROM accident_logs a ${where ? where.replace(/measured_at/g, 'occurred_at') : ''} ORDER BY a.occurred_at DESC)`;
     const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql}`;
-    db.query(unionSql, [...params, ...params, ...params], (err, results) => {
-        if (err) return res.status(500).send('DB Error');
+    const queryParams = where ? [...params, ...params, ...params] : [];
+    db.query(unionSql, queryParams, (err, results) => {
+        if (err) return res.status(500).json({error: err.message});
         res.json({ data: results, totalPages: 1 });
     });
 });
