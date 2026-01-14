@@ -67,6 +67,7 @@ app.get('/api/history', (req, res) => {
     let selectTime = '';
     let envGroupBy = '';
     let envSelectTime = '';
+    // accidentWhereは常に空にする
     let accidentWhere = '';
     if (range && date) {
         if (range === 'day') {
@@ -77,7 +78,7 @@ app.get('/api/history', (req, res) => {
             selectTime = 'c.measured_at AS measured_at';
             envGroupBy = 'e.device_id, e.measured_at';
             envSelectTime = 'e.measured_at';
-            accidentWhere = 'WHERE DATE(occurred_at) = ?';
+            // accidentWhere = 'WHERE DATE(occurred_at) = ?'; // ← 削除
         } else if (range === 'week') {
             // 5分ごと
             where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
@@ -86,7 +87,7 @@ app.get('/api/history', (req, res) => {
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at), HOUR(e.measured_at), FLOOR(MINUTE(e.measured_at)/5)`;
             envSelectTime = `MIN(e.measured_at)`;
-            accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)';
+            // accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)'; // ← 削除
         } else if (range === 'month') {
             // 1時間ごと
             where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
@@ -95,7 +96,7 @@ app.get('/api/history', (req, res) => {
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at), HOUR(e.measured_at)`;
             envSelectTime = `MIN(e.measured_at)`;
-            accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            // accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")'; // ← 削除
         } else if (range === 'all') {
             // 1日ごと
             where = '';
@@ -103,7 +104,7 @@ app.get('/api/history', (req, res) => {
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at)`;
             envSelectTime = `MIN(e.measured_at)`;
-            accidentWhere = '';
+            // accidentWhere = ''; // ← そのまま
         }
     } else {
         // デフォルト（日ごと、平均なし）
