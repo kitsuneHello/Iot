@@ -264,11 +264,17 @@
             });
 
             accidentChart = new Chart(ctxAccident, {
-                type: 'bar',
-                data: { labels: [], datasets: [{ label: '事故件数', data: [], backgroundColor: 'orange' }] },
+                type: 'scatter',
+                data: { labels: [], datasets: [{ 
+                    label: '事故件数', 
+                    data: [], 
+                    backgroundColor: 'orange', 
+                    pointRadius: 6, 
+                    showLine: false 
+                }] },
                 options: {
                     responsive: true,
-                    scales: { x: { type: 'time' }, y: { beginAtZero: true } },
+                    scales: { x: { type: 'time' }, y: { beginAtZero: true, suggestedMax: 1, ticks: { stepSize: 1 } } },
                     plugins: {
                         tooltip: {
                             callbacks: {
@@ -358,7 +364,10 @@
             humChart.update();
 
             accidentChart.data.labels = accidentTable.map(row => row.occurred_at);
-            accidentChart.data.datasets[0].data = accidentTable.map(() => 1); // 件数を1でカウント
+            accidentChart.data.datasets[0].data = accidentTable.map(row => ({
+                x: toISO(row.occurred_at),
+                y: 1
+            }));
             accidentChart.update();
 
             // --- x軸範囲・目盛り設定 ---
@@ -454,6 +463,17 @@
                 };
             }
 
+            // xMin, xMax をDate型にして±余白
+            if (xMin && xMax) {
+                const minDate = new Date(xMin);
+                const maxDate = new Date(xMax);
+                // 余白: 全体の2%（最低10分, 最大1日まで）
+                const diff = maxDate - minDate;
+                let pad = Math.max(10 * 60 * 1000, Math.min(diff * 0.02, 24 * 60 * 60 * 1000));
+                xMin = new Date(minDate.getTime() - pad).toISOString();
+                xMax = new Date(maxDate.getTime() + pad).toISOString();
+            }
+
             // x軸設定を全グラフに適用
             function setXOptions(chart) {
                 if (!chart) return;
@@ -466,7 +486,7 @@
             setXOptions(pressureChart);
             setXOptions(tempChart);
             setXOptions(humChart);
-            setXOptions(accidentChart);
+            setXOptions(accidentChart); // ← 事故情報グラフも同じx軸設定が適用されます
         }
         // CSVダウンロード
         async function downloadCSV() {
