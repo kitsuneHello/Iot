@@ -641,18 +641,10 @@
         }
         // CSVダウンロード
         async function downloadCSV() {
-            const range = document.getElementById('rangeSelect').value;
-            const date = document.getElementById('dateInput').value;
-            let url = `/api/rawdata`;
-            if (range && date) {
-                url += `?range=${range}&date=${date}`;
-            }
-            const result = await fetch(url).then(r => r.json());
-            const data = result.data || result;
+            const result = await fetch('/api/history').then(r => r.json());
+            const data = result.data || result; // 互換
             let csv = '階/デバイス,混雑度,気圧,温度,湿度,時刻\n';
-            csv += data.map(row =>
-                `${row.device_id || row.floor_number || ''},${row.congestion_level ?? ''},${row.pressure ?? ''},${row.temperature ?? ''},${row.humidity ?? ''},${row.measured_at || row.occurred_at || ''}`
-            ).join('\n');
+            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.pressure || ''},${row.temperature || ''},${row.humidity || ''},${row.measured_at}`).join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);

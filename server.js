@@ -2,7 +2,7 @@ const express = require('express');
 const mqtt = require('mqtt');
 const mysql = require('mysql2');
 const app = express();
-const port = 80;
+const port = 3000;
 
 // MySQL接続
 const db = mysql.createConnection({
@@ -140,56 +140,6 @@ app.get('/api/history', (req, res) => {
     db.query(unionSql, [...params, ...params, ...params], (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json({ data: results, totalPages: 1 });
-    });
-});
-
-// 生データ取得API
-app.get('/api/rawdata', (req, res) => {
-    let { range, date } = req.query;
-    let congestionWhere = '';
-    let envWhere = '';
-    let accidentWhere = '';
-    let params = [];
-    if (range && date) {
-        if (range === 'day') {
-            congestionWhere = 'WHERE DATE(measured_at) = ?';
-            envWhere = 'WHERE DATE(measured_at) = ?';
-            accidentWhere = 'WHERE DATE(occurred_at) = ?';
-            params = [date, date, date];
-        } else if (range === 'week') {
-            congestionWhere = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
-            envWhere = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
-            accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)';
-            params = [date, date, date];
-        } else if (range === 'month') {
-            congestionWhere = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            envWhere = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            params = [date, date, date];
-        } else if (range === 'all') {
-            congestionWhere = '';
-            envWhere = '';
-            accidentWhere = '';
-            params = [];
-        }
-    }
-    // 混雑度
-    const congestionSql = `SELECT d.floor_number, c.device_id, c.congestion_level, c.measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at
-        FROM congestion_logs c
-        JOIN devices d ON c.device_id = d.device_id
-        ${congestionWhere}`;
-    // 環境
-    const envSql = `SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, e.pressure, e.temperature, e.humidity, NULL AS accident_type, NULL AS occurred_at
-        FROM environment_logs e
-        ${envWhere}`;
-    // 事故
-    const accidentSql = `SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
-        FROM accident_logs a
-        ${accidentWhere}`;
-    const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql} ORDER BY measured_at DESC, occurred_at DESC`;
-    db.query(unionSql, params, (err, results) => {
-        if (err) return res.status(500).send('DB Error');
-        res.json({ data: results });
     });
 });
 
