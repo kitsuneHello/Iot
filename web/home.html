@@ -8,53 +8,195 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
+        :root {
+            --main-bg: #f7f9fb;
+            --card-bg: #fff;
+            --accent: #1976d2;
+            --accent-light: #e3f2fd;
+            --border: #e0e0e0;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+            --radius: 12px;
+        }
+
         body {
-            font-family: sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            margin: 0;
+            background: var(--main-bg);
+            color: #222;
+        }
+
+        h1 {
+            margin: 0 0 24px 0;
+            padding: 32px 0 16px 0;
+            text-align: center;
+            background: linear-gradient(90deg, var(--accent-light) 0%, #fff 100%);
+            color: var(--accent);
+            font-size: 2.2rem;
+            letter-spacing: 2px;
+            box-shadow: var(--shadow);
         }
 
         h2 {
-            margin-top: 30px;
+            margin-top: 40px;
+            color: var(--accent);
+            font-size: 1.4rem;
+            border-left: 6px solid var(--accent);
+            padding-left: 12px;
         }
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 20px;
-        }
-
-        th,
-        td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: center;
-        }
-
-        th {
-            background: #f0f0f0;
+        h3,
+        h4 {
+            color: #333;
+            margin-top: 18px;
+            margin-bottom: 10px;
         }
 
         .realtime {
             display: flex;
-            gap: 40px;
+            gap: 32px;
+            margin: 0 0 32px 0;
+            flex-wrap: wrap;
         }
 
         .realtime>div {
             flex: 1;
+            min-width: 320px;
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 18px 18px 10px 18px;
+            border: 1px solid var(--border);
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            margin-bottom: 18px;
+            background: #fff;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid var(--border);
+            padding: 10px 8px;
+            text-align: center;
+        }
+
+        th {
+            background: var(--accent-light);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: #f1f8ff;
         }
 
         .download-btn {
-            margin-bottom: 10px;
+            margin-bottom: 18px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            padding: 10px 28px;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(25, 118, 210, 0.08);
+            transition: background 0.2s;
+        }
+
+        .download-btn:hover {
+            background: #125ea9;
         }
 
         .scrollable-table {
-            max-height: 500px;
+            max-height: 340px;
             overflow-y: auto;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: #fff;
+        }
+
+        #tableArea {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 18px 18px 10px 18px;
+            margin-top: 18px;
+            border: 1px solid var(--border);
         }
 
         /* グラフの最小高さを確保（レスポンシブ時の見栄え向上） */
         canvas {
             min-height: 220px;
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+            margin-bottom: 10px;
+        }
+
+        /* グラフとテーブルのレイアウト */
+        @media (max-width: 1100px) {
+            .realtime {
+                flex-direction: column;
+            }
+
+            .realtime>div {
+                min-width: unset;
+            }
+        }
+
+        @media (max-width: 900px) {
+            #tableArea,
+            .realtime>div {
+                padding: 10px 4px 6px 4px;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .realtime,
+            #tableArea>div {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .download-btn {
+                width: 100%;
+            }
+        }
+
+        select,
+        input[type="date"] {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 1rem;
+            margin-left: 4px;
+            margin-right: 8px;
+        }
+
+        label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        /* スクロールバー美化 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            background: #f0f0f0;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #b3c6e0;
+            border-radius: 8px;
         }
     </style>
 </head>
