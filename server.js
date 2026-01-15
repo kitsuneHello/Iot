@@ -157,7 +157,12 @@ const mqttClient = mqtt.connect('mqtt://localhost:1883');
 // MQTT接続成功時の処理
 mqttClient.on('connect', () => {
     console.log('Connected to Mosquitto');
-    mqttClient.subscribe(['elevator/congestion', 'elevator/environment', 'elevator/accident']);
+    mqttClient.subscribe([
+        'elevator/congestion',
+        'elevator/environment',
+        'elevator/accident',
+        'elevator/arrival' // 追加: 到着階数トピック
+    ]);
 });
 
 // MQTTメッセージ受信処理
@@ -178,12 +183,26 @@ mqttClient.on('message', (topic, message) => {
         else if (topic === 'elevator/accident') {
             db.query('INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
                 [data.device_id, data.accident_type, timestamp]);
+        } 
+        else if (topic === 'elevator/arrival') {
+            // { device_id, floor_number, arrived_at }
+            // arrived_atがなければ現在時刻
+            const arrivedAt = data.arrived_at ? new Date(data.arrived_at) : new Date();
+            // 必要ならDB保存処理を追加（今回は配信のみ）
+            // すべてのサブスクライバーに階数データを配信
+            mqttClient.publish(
+                'elevator/arrival/broadcast',
+                JSON.stringify({
+                    device_id: data.device_id,
+                    floor_number: data.floor_number,
+                    arrived_at: arrivedAt
+                })
+            );
         }
     } catch (e) {
         console.error('MQTT Parse Error:', e);
     }
 });
-
 
 // MQTTメッセージ受信
 mqttClient.on('message', (topic, message) => {
@@ -214,6 +233,14 @@ mqttClient.on('message', (topic, message) => {
                 'INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
                 [data.device_id, data.accident_type, data.occurred_at || timestamp],
                 (err) => { if (err) console.error('DB insert error (accident):', err); }
+            );
+        } else if (topic === 'elevator/arrival') {
+            // エレベーター到着階数データを受信
+            // { device_id, floor_number, arrived_at }
+            db.query(
+                'INSERT INTO arrival_logs (device_id, floor_number, arrived_at) VALUES (?, ?, ?)',
+                [data.device_id, data.floor_number, data.arrived_at || timestamp],
+                (err) => { if (err) console.error('DB insert error (arrival):', err); }
             );
         }
     } catch (e) {
