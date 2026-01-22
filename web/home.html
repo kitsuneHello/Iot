@@ -240,84 +240,69 @@
         <div id="accidentTableContainer" class="scrollable-table"></div>
     </div>
 
-    <script>
+<script>
         // --- 共通設定 ---
         const commonOptions = {
             responsive: true,
-            maintainAspectRatio: false, // コンテナのサイズに合わせる
-            scales: {
-                x: { type: 'time' }
-            },
-            plugins: {
-                legend: { position: 'top' }
-            }
+            maintainAspectRatio: false,
+            scales: { x: { type: 'time' } },
+            plugins: { legend: { position: 'top' } }
         };
 
         function toISO(dt) { return dt ? dt.replace(' ', 'T') : dt; }
         function getColor(i) { return `hsl(${(i * 45) % 360} 75% 45%)`; }
+        // 日時を見やすく整形する関数
+        function fmtDate(dt) { return dt ? new Date(dt).toLocaleString('ja-JP') : '-'; }
 
-        // グラフ初期化
         let congestionChart, pressureChart, tempChart, humChart, accidentChart;
 
         function initCharts() {
-            const chartConfigs = [
-                { id: 'congestionChart', type: 'line', color: 'blue', label: '混雑度' },
-                { id: 'pressureChart', type: 'line', color: 'green', label: '気圧' },
-                { id: 'tempChart', type: 'line', color: 'red', label: '温度' },
-                { id: 'humChart', type: 'line', color: 'purple', label: '湿度' }
-            ];
+            // (ここは変更なしでOKです)
+            const ctxCongestion = document.getElementById('congestionChart').getContext('2d');
+            const ctxAccident = document.getElementById('accidentChart').getContext('2d');
+            const ctxPressure = document.getElementById('pressureChart').getContext('2d');
+            const ctxTemp = document.getElementById('tempChart').getContext('2d');
+            const ctxHum = document.getElementById('humChart').getContext('2d');
 
-            congestionChart = new Chart(document.getElementById('congestionChart'), {
-                type: 'line',
-                data: { datasets: [] },
-                options: { 
-                    ...commonOptions,
-                    scales: { ...commonOptions.scales, y: { min: 0, max: 1 } }
-                }
+            congestionChart = new Chart(ctxCongestion, {
+                type: 'line', data: { datasets: [] },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { min: 0, max: 1 } } }
             });
 
-            accidentChart = new Chart(document.getElementById('accidentChart'), {
-                type: 'scatter',
-                data: { datasets: [{ label: '事故件数', backgroundColor: 'orange', pointRadius: 6 }] },
-                options: {
-                    ...commonOptions,
-                    scales: { ...commonOptions.scales, y: { beginAtZero: true, suggestedMax: 1, ticks: { stepSize: 1 } } }
-                }
+            accidentChart = new Chart(ctxAccident, {
+                type: 'scatter', data: { datasets: [{ label: '事故件数', backgroundColor: 'orange', pointRadius: 6 }] },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { beginAtZero: true, suggestedMax: 1, ticks: { stepSize: 1 } } } }
             });
 
-            pressureChart = new Chart(document.getElementById('pressureChart'), {
-                type: 'line',
-                data: { datasets: [{ label: '気圧', borderColor: 'green' }] },
-                options: commonOptions
+            pressureChart = new Chart(ctxPressure, {
+                type: 'line', data: { datasets: [{ label: '気圧', borderColor: 'green' }] }, options: commonOptions
             });
-
-            tempChart = new Chart(document.getElementById('tempChart'), {
-                type: 'line',
-                data: { datasets: [{ label: '温度', borderColor: 'red' }] },
-                options: commonOptions
+            tempChart = new Chart(ctxTemp, {
+                type: 'line', data: { datasets: [{ label: '温度', borderColor: 'red' }] }, options: commonOptions
             });
-
-            humChart = new Chart(document.getElementById('humChart'), {
-                type: 'line',
-                data: { datasets: [{ label: '湿度', borderColor: 'purple' }] },
-                options: commonOptions
+            humChart = new Chart(ctxHum, {
+                type: 'line', data: { datasets: [{ label: '湿度', borderColor: 'purple' }] }, options: commonOptions
             });
         }
 
-        // 既存のデータ取得・更新ロジック (fetchRealtime, fetchHistory, downloadCSV) は
-        // 基本的にそのまま利用可能です。
-        // setXOptions 内の chart.update() も正常に動作します。
-        
         async function fetchRealtime() {
             try {
                 const [congestion, env] = await Promise.all([
                     fetch('/api/congestion/latest').then(r => r.json()),
                     fetch('/api/environment/latest').then(r => r.json())
                 ]);
+                
+                // 混雑度テーブル更新
                 const ct = document.querySelector('#congestion-table tbody');
-                ct.innerHTML = congestion.map(row => `<tr><td>${row.floor_number}</td><td>${row.congestion_level}</td><td>${row.measured_at}</td></tr>`).join('');
+                ct.innerHTML = congestion.map(row => 
+                    `<tr><td>${row.floor_number}</td><td>${Number(row.congestion_level).toFixed(2)}</td><td>${fmtDate(row.measured_at)}</td></tr>`
+                ).join('');
+
+                // 環境テーブル更新
                 const et = document.querySelector('#env-table tbody');
-                et.innerHTML = env.map(row => `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${row.measured_at}</td></tr>`).join('');
+                et.innerHTML = env.map(row => 
+                    `<tr><td>${row.device_id}</td><td>${row.pressure}</td><td>${row.temperature}</td><td>${row.humidity}</td><td>${fmtDate(row.measured_at)}</td></tr>`
+                ).join('');
             } catch(e) { console.error("Realtime fetch error", e); }
         }
 
@@ -331,12 +316,53 @@
                 const result = await res.json();
                 const data = result.data;
 
-                // --- グラフ更新ロジック (提供されたコードの移植) ---
+                // データ分類
                 const congestion = data.filter(row => row.congestion_level != null);
                 const envData = data.filter(row => row.pressure != null);
                 const accidents = data.filter(row => row.accident_type != null);
 
-                // 混雑度
+                // --- テーブル更新処理 (ここを修正しました) ---
+
+                // 1. 混雑度テーブル
+                const congHtml = `<table>
+                    <thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead>
+                    <tbody>` + 
+                    congestion.map(r => `<tr>
+                        <td>${r.floor_number ? r.floor_number + '階' : r.device_id}</td>
+                        <td>${Number(r.congestion_level).toFixed(2)}</td>
+                        <td>${fmtDate(r.measured_at)}</td>
+                    </tr>`).join('') + 
+                    `</tbody></table>`;
+                document.getElementById('congestionTableContainer').innerHTML = congHtml;
+
+                // 2. 環境データテーブル
+                const envHtml = `<table>
+                    <thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead>
+                    <tbody>` + 
+                    envData.map(r => `<tr>
+                        <td>${r.device_id}</td>
+                        <td>${Number(r.pressure).toFixed(1)}</td>
+                        <td>${Number(r.temperature).toFixed(1)}</td>
+                        <td>${Number(r.humidity).toFixed(1)}</td>
+                        <td>${fmtDate(r.measured_at)}</td>
+                    </tr>`).join('') + 
+                    `</tbody></table>`;
+                document.getElementById('environmentTableContainer').innerHTML = envHtml;
+
+                // 3. 事故情報テーブル (ここが抜けていました)
+                const accHtml = `<table>
+                    <thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead>
+                    <tbody>` + 
+                    accidents.map(r => `<tr>
+                        <td>${r.device_id}</td>
+                        <td>${r.accident_type}</td>
+                        <td>${fmtDate(r.occurred_at)}</td>
+                    </tr>`).join('') + 
+                    `</tbody></table>`;
+                document.getElementById('accidentTableContainer').innerHTML = accHtml;
+
+
+                // --- グラフ更新ロジック (変更なし) ---
                 const groups = {};
                 congestion.forEach(r => {
                     const k = r.floor_number !== undefined ? `階 ${r.floor_number}` : (r.device_id || 'unknown');
@@ -348,20 +374,14 @@
                 }));
                 congestionChart.update();
 
-                // 環境
                 pressureChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.pressure }));
                 tempChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.temperature }));
                 humChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.humidity }));
                 [pressureChart, tempChart, humChart].forEach(c => c.update());
 
-                // 事故
                 accidentChart.data.datasets[0].data = accidents.map(r => ({ x: toISO(r.occurred_at), y: 1 }));
                 accidentChart.update();
 
-                // テーブル更新
-                document.getElementById('congestionTableContainer').innerHTML = `<table><tr><th>時刻</th><th>混雑度</th></tr>` + congestion.map(r => `<tr><td>${r.measured_at}</td><td>${r.congestion_level}</td></tr>`).join('') + `</table>`;
-                document.getElementById('environmentTableContainer').innerHTML = `<table><tr><th>時刻</th><th>温度</th><th>湿度</th></tr>` + envData.map(r => `<tr><td>${r.measured_at}</td><td>${r.temperature}</td></tr>`).join('') + `</table>`;
-                
             } catch(e) { console.error("History fetch error", e); }
         }
 
@@ -369,8 +389,11 @@
             const result = await fetch('/api/history').then(r => r.json());
             const data = result.data || [];
             let csv = '階/デバイス,混雑度,気圧,温度,湿度,時刻\n';
-            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.pressure || ''},${row.temperature || ''},${row.humidity || ''},${row.measured_at}`).join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
+            csv += data.map(row => `${row.device_id || row.floor_number},${row.congestion_level || ''},${row.pressure || ''},${row.temperature || ''},${row.humidity || ''},${fmtDate(row.measured_at || row.occurred_at)}`).join('\n');
+            
+            // BOMを付加してExcelでの文字化けを防ぐ
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+            const blob = new Blob([bom, csv], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = 'history.csv';
