@@ -131,6 +131,16 @@
             overflow-y: auto;
             border: 1px solid var(--border);
             border-radius: var(--radius);
+            background: #fff; /* 背景色追加 */
+        }
+
+        /* データなしメッセージ用のスタイル */
+        .no-data {
+            padding: 30px;
+            text-align: center;
+            color: #888;
+            background: #fafafa;
+            font-style: italic;
         }
 
         .download-btn {
@@ -321,45 +331,60 @@
                 const envData = data.filter(row => row.pressure != null);
                 const accidents = data.filter(row => row.accident_type != null);
 
-                // --- テーブル更新処理 (ここを修正しました) ---
+                // --- テーブル更新処理 (データなしメッセージ表示を追加) ---
 
                 // 1. 混雑度テーブル
-                const congHtml = `<table>
-                    <thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead>
-                    <tbody>` + 
-                    congestion.map(r => `<tr>
-                        <td>${r.floor_number ? r.floor_number + '階' : r.device_id}</td>
-                        <td>${Number(r.congestion_level).toFixed(2)}</td>
-                        <td>${fmtDate(r.measured_at)}</td>
-                    </tr>`).join('') + 
-                    `</tbody></table>`;
-                document.getElementById('congestionTableContainer').innerHTML = congHtml;
+                const congContainer = document.getElementById('congestionTableContainer');
+                if (congestion.length === 0) {
+                    congContainer.innerHTML = '<div class="no-data">指定された範囲の混雑度データはありません。</div>';
+                } else {
+                    const congHtml = `<table>
+                        <thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead>
+                        <tbody>` + 
+                        congestion.map(r => `<tr>
+                            <td>${r.floor_number ? r.floor_number + '階' : r.device_id}</td>
+                            <td>${Number(r.congestion_level).toFixed(2)}</td>
+                            <td>${fmtDate(r.measured_at)}</td>
+                        </tr>`).join('') + 
+                        `</tbody></table>`;
+                    congContainer.innerHTML = congHtml;
+                }
 
                 // 2. 環境データテーブル
-                const envHtml = `<table>
-                    <thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead>
-                    <tbody>` + 
-                    envData.map(r => `<tr>
-                        <td>${r.device_id}</td>
-                        <td>${Number(r.pressure).toFixed(1)}</td>
-                        <td>${Number(r.temperature).toFixed(1)}</td>
-                        <td>${Number(r.humidity).toFixed(1)}</td>
-                        <td>${fmtDate(r.measured_at)}</td>
-                    </tr>`).join('') + 
-                    `</tbody></table>`;
-                document.getElementById('environmentTableContainer').innerHTML = envHtml;
+                const envContainer = document.getElementById('environmentTableContainer');
+                if (envData.length === 0) {
+                    envContainer.innerHTML = '<div class="no-data">指定された範囲の環境データはありません。</div>';
+                } else {
+                    const envHtml = `<table>
+                        <thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead>
+                        <tbody>` + 
+                        envData.map(r => `<tr>
+                            <td>${r.device_id}</td>
+                            <td>${Number(r.pressure).toFixed(1)}</td>
+                            <td>${Number(r.temperature).toFixed(1)}</td>
+                            <td>${Number(r.humidity).toFixed(1)}</td>
+                            <td>${fmtDate(r.measured_at)}</td>
+                        </tr>`).join('') + 
+                        `</tbody></table>`;
+                    envContainer.innerHTML = envHtml;
+                }
 
-                // 3. 事故情報テーブル (ここが抜けていました)
-                const accHtml = `<table>
-                    <thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead>
-                    <tbody>` + 
-                    accidents.map(r => `<tr>
-                        <td>${r.device_id}</td>
-                        <td>${r.accident_type}</td>
-                        <td>${fmtDate(r.occurred_at)}</td>
-                    </tr>`).join('') + 
-                    `</tbody></table>`;
-                document.getElementById('accidentTableContainer').innerHTML = accHtml;
+                // 3. 事故情報テーブル
+                const accContainer = document.getElementById('accidentTableContainer');
+                if (accidents.length === 0) {
+                    accContainer.innerHTML = '<div class="no-data">指定された範囲の事故情報はありません。</div>';
+                } else {
+                    const accHtml = `<table>
+                        <thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead>
+                        <tbody>` + 
+                        accidents.map(r => `<tr>
+                            <td>${r.device_id}</td>
+                            <td>${r.accident_type}</td>
+                            <td>${fmtDate(r.occurred_at)}</td>
+                        </tr>`).join('') + 
+                        `</tbody></table>`;
+                    accContainer.innerHTML = accHtml;
+                }
 
 
                 // --- グラフ更新ロジック (変更なし) ---
