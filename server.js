@@ -66,6 +66,7 @@ app.get('/api/environment/latest', (req, res) => {
 });
 
 // 過去データ（混雑度・環境・事故）の統合取得
+// ★★★ ここを修正しました ★★★
 app.get('/api/history', (req, res) => {
     let { range, date } = req.query;
     let where = '';
@@ -74,12 +75,16 @@ app.get('/api/history', (req, res) => {
     let selectTime = '';
     let envGroupBy = '';
     let envSelectTime = '';
-    let accidentWhere = '';
+    let accidentWhere = ''; // 初期化
 
     // フィルタ条件の構築
     if (range && date) {
         if (range === 'day') {
+            // 混雑・環境用 (measured_at)
             where = 'WHERE DATE(measured_at) = ?';
+            // 事故用 (occurred_at)
+            accidentWhere = 'WHERE DATE(occurred_at) = ?';
+            
             params.push(date);
             groupBy = 'c.device_id, c.measured_at';
             selectTime = 'c.measured_at AS measured_at';
@@ -87,6 +92,8 @@ app.get('/api/history', (req, res) => {
             envSelectTime = 'e.measured_at';
         } else if (range === 'week') {
             where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
+            accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)';
+            
             params.push(date);
             groupBy = `c.device_id, DATE(c.measured_at), HOUR(c.measured_at), FLOOR(MINUTE(c.measured_at)/5)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
@@ -94,6 +101,8 @@ app.get('/api/history', (req, res) => {
             envSelectTime = `MIN(e.measured_at)`;
         } else if (range === 'month') {
             where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            
             params.push(date);
             groupBy = `c.device_id, DATE(c.measured_at), HOUR(c.measured_at)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
@@ -101,6 +110,7 @@ app.get('/api/history', (req, res) => {
             envSelectTime = `MIN(e.measured_at)`;
         } else if (range === 'all') {
             where = '';
+            accidentWhere = '';
             groupBy = `c.device_id, DATE(c.measured_at)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at)`;
@@ -129,6 +139,7 @@ app.get('/api/history', (req, res) => {
         GROUP BY ${envGroupBy}
         ORDER BY measured_at DESC)`;
 
+    // ★ 事故情報のクエリで accidentWhere を使用
     const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
         FROM accident_logs a
         ${accidentWhere}
@@ -188,6 +199,7 @@ mqttClient.on('message', (topic, message) => {
                 (err) => { if (err) console.error('DB Insert Error (environment):', err); }
             );
         } else if (topic === 'elevator/accident') {
+            // ★事故データは occurred_at を使う点に注意
             db.query(
                 'INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
                 [data.device_id, data.accident_type, data.occurred_at || timestamp],
@@ -200,8 +212,6 @@ mqttClient.on('message', (topic, message) => {
                 [data.device_id, data.floor_number, data.arrived_at || timestamp],
                 (err) => { if (err) console.error('DB Insert Error (arrival):', err); }
             );
-            // ※到着データ自体もブロードキャストする場合はここでPublishしても良いですが、
-            // 下記のシミュレーションループが定期的に送るため、ここでは保存のみとします。
         }
     } catch (e) {
         console.error('MQTT message parse error:', e);
@@ -251,7 +261,6 @@ function moveElevator() {
     }
 
     // ブロードキャスト用トピックへ送信
-    // 全てのホール端末はこのトピックをSubscribeしてください
     const topic = 'elevator/broadcast/floor';
     
     const payload = JSON.stringify({
