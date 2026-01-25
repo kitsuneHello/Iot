@@ -6,9 +6,9 @@ const port = 3000;
 
 // MySQL接続設定
 const db = mysql.createConnection({
-    host: '10.0.2.5',      // DB_SERVER_PRIVATE_IP
-    user: 'node_user',     // YOUR_USER
-    password: 'Group-02',  // YOUR_PASSWORD
+    host: '10.0.2.5',
+    user: 'node_user',
+    password: 'Group-02',
     database: 'elevator_db'
 });
 
@@ -17,17 +17,13 @@ db.connect((err) => {
         console.error('MySQL接続失敗:', err.message);
     } else {
         console.log('MySQL接続成功');
-        // 接続成功したらシミュレーションを開始
         startElevatorSimulation();
     }
 });
 
+// --- API エンドポイント ---
 
-// ---------------------------------------------------
-// API エンドポイント
-// ---------------------------------------------------
-
-// 混雑度ログ取得（デバッグ用）
+// 混雑度ログ（デバッグ用）
 app.get('/api/congestion', (req, res) => {
     db.query('SELECT * FROM congestion_logs ORDER BY measured_at DESC', (err, results) => {
         if (err) return res.status(500).send('DB Error');
@@ -35,27 +31,23 @@ app.get('/api/congestion', (req, res) => {
     });
 });
 
-// 最新の混雑度（各階のホール最新値）
+// 最新の混雑度
 app.get('/api/congestion/latest', (req, res) => {
     db.query(`SELECT floor_number, congestion_level, measured_at
         FROM (
-          SELECT
-            d.floor_number,
-            c.congestion_level,
-            c.measured_at,
+          SELECT d.floor_number, c.congestion_level, c.measured_at,
             ROW_NUMBER() OVER (PARTITION BY c.device_id ORDER BY c.measured_at DESC) as rn
           FROM congestion_logs c
           JOIN devices d ON c.device_id = d.device_id
           WHERE d.location_type = 'HALL'
         ) t
-        WHERE t.rn = 1
-        ORDER BY floor_number`, (err, results) => {
+        WHERE t.rn = 1 ORDER BY floor_number`, (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json(results);
     });
 });
 
-// 最新のエレベーター環境（各デバイス最新値）
+// 最新の環境情報
 app.get('/api/environment/latest', (req, res) => {
     db.query(`SELECT device_id, pressure, temperature, humidity, measured_at FROM environment_logs
         WHERE measured_at = (SELECT MAX(measured_at) FROM environment_logs WHERE device_id = environment_logs.device_id)
@@ -65,26 +57,22 @@ app.get('/api/environment/latest', (req, res) => {
     });
 });
 
-// 過去データ（混雑度・環境・事故）の統合取得
-// ★★★ ここを修正しました ★★★
+// ★★★ 履歴取得API（ここを修正） ★★★
 app.get('/api/history', (req, res) => {
     let { range, date } = req.query;
     let where = '';
+    let accidentWhere = '';
     let params = [];
     let groupBy = '';
     let selectTime = '';
     let envGroupBy = '';
     let envSelectTime = '';
-    let accidentWhere = ''; // 初期化
 
-    // フィルタ条件の構築
+    // フィルタ条件構築
     if (range && date) {
         if (range === 'day') {
-            // 混雑・環境用 (measured_at)
             where = 'WHERE DATE(measured_at) = ?';
-            // 事故用 (occurred_at)
             accidentWhere = 'WHERE DATE(occurred_at) = ?';
-            
             params.push(date);
             groupBy = 'c.device_id, c.measured_at';
             selectTime = 'c.measured_at AS measured_at';
@@ -93,7 +81,6 @@ app.get('/api/history', (req, res) => {
         } else if (range === 'week') {
             where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
             accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)';
-            
             params.push(date);
             groupBy = `c.device_id, DATE(c.measured_at), HOUR(c.measured_at), FLOOR(MINUTE(c.measured_at)/5)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
@@ -102,7 +89,6 @@ app.get('/api/history', (req, res) => {
         } else if (range === 'month') {
             where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
             accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            
             params.push(date);
             groupBy = `c.device_id, DATE(c.measured_at), HOUR(c.measured_at)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
@@ -117,164 +103,93 @@ app.get('/api/history', (req, res) => {
             envSelectTime = `MIN(e.measured_at)`;
         }
     } else {
-        // デフォルト設定
         groupBy = 'c.device_id, c.measured_at';
         selectTime = 'c.measured_at AS measured_at';
         envGroupBy = 'e.device_id, e.measured_at';
         envSelectTime = 'e.measured_at';
-        accidentWhere = '';
     }
 
-    // UNIONクエリの構築
-    const congestionSql = `(SELECT d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, ${selectTime}, NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at
+    // ★ SQL修正: 'rec_type' カラムを追加し、フロントエンドで判別可能にする
+    
+    // 1. 混雑度
+    const congestionSql = `(SELECT 
+            'CONGESTION' as rec_type,
+            d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, ${selectTime}, 
+            NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at
         FROM congestion_logs c
         JOIN devices d ON c.device_id = d.device_id
         ${where}
-        GROUP BY ${groupBy}
-        ORDER BY measured_at DESC)`;
+        GROUP BY ${groupBy})`;
 
-    const envSql = `(SELECT NULL AS floor_number, e.device_id, NULL AS congestion_level, ${envSelectTime} AS measured_at, AVG(e.pressure) AS pressure, AVG(e.temperature) AS temperature, AVG(e.humidity) AS humidity, NULL AS accident_type, NULL AS occurred_at
+    // 2. 環境
+    const envSql = `(SELECT 
+            'ENVIRONMENT' as rec_type,
+            NULL AS floor_number, e.device_id, NULL AS congestion_level, ${envSelectTime} AS measured_at, 
+            AVG(e.pressure) AS pressure, AVG(e.temperature) AS temperature, AVG(e.humidity) AS humidity, NULL AS accident_type, NULL AS occurred_at
         FROM environment_logs e
         ${where}
-        GROUP BY ${envGroupBy}
-        ORDER BY measured_at DESC)`;
+        GROUP BY ${envGroupBy})`;
 
-    // ★ 事故情報のクエリで accidentWhere を使用
-    const accidentSql = `(SELECT NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
+    // 3. 事故
+    const accidentSql = `(SELECT 
+            'ACCIDENT' as rec_type,
+            NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, 
+            NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
         FROM accident_logs a
-        ${accidentWhere}
-        ORDER BY a.occurred_at DESC)`;
+        ${accidentWhere})`;
 
-    const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql}`;
+    const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql} ORDER BY measured_at DESC, occurred_at DESC`;
     
-    // パラメータは3つのクエリで同じものを使うため3回繰り返す
     db.query(unionSql, [...params, ...params, ...params], (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json({ data: results });
     });
 });
 
-// Web画面の静的ファイル配信
 app.use(express.static('web'));
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/web/home.html');
-});
+app.get('/', (req, res) => { res.sendFile(__dirname + '/web/home.html'); });
 
-
-// ---------------------------------------------------
-// MQTT 設定 & メッセージ処理
-// ---------------------------------------------------
-
+// --- MQTT ---
 const mqttClient = mqtt.connect('mqtt://localhost:1883');
-
 mqttClient.on('connect', () => {
     console.log('Connected to Mosquitto');
-    mqttClient.subscribe([
-        'elevator/congestion',
-        'elevator/environment',
-        'elevator/accident',
-        'elevator/arrival'
-    ]);
+    mqttClient.subscribe(['elevator/congestion', 'elevator/environment', 'elevator/accident', 'elevator/arrival']);
 });
 
 mqttClient.on('message', (topic, message) => {
-    // デバッグログ
-    console.log(`[DEBUG] Topic: ${topic}, Message: ${message.toString()}`);
-    
     try {
         const data = JSON.parse(message.toString());
-        // 時刻がなければ現在時刻を使用
         const timestamp = data.measured_at ? new Date(data.measured_at) : new Date();
-
         if (topic === 'elevator/congestion') {
-            db.query(
-                'INSERT INTO congestion_logs (device_id, congestion_level, measured_at) VALUES (?, ?, ?)',
-                [data.device_id, data.congestion_level, data.measured_at || timestamp],
-                (err) => { if (err) console.error('DB Insert Error (congestion):', err); }
-            );
+            db.query('INSERT INTO congestion_logs (device_id, congestion_level, measured_at) VALUES (?, ?, ?)',
+                [data.device_id, data.congestion_level, data.measured_at || timestamp], err => { if(err) console.error(err); });
         } else if (topic === 'elevator/environment') {
-            db.query(
-                'INSERT INTO environment_logs (device_id, pressure, temperature, humidity, measured_at) VALUES (?, ?, ?, ?, ?)',
-                [data.device_id, data.pressure, data.temperature, data.humidity, data.measured_at || timestamp],
-                (err) => { if (err) console.error('DB Insert Error (environment):', err); }
-            );
+            db.query('INSERT INTO environment_logs (device_id, pressure, temperature, humidity, measured_at) VALUES (?, ?, ?, ?, ?)',
+                [data.device_id, data.pressure, data.temperature, data.humidity, data.measured_at || timestamp], err => { if(err) console.error(err); });
         } else if (topic === 'elevator/accident') {
-            // ★事故データは occurred_at を使う点に注意
-            db.query(
-                'INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
-                [data.device_id, data.accident_type, data.occurred_at || timestamp],
-                (err) => { if (err) console.error('DB Insert Error (accident):', err); }
-            );
+            db.query('INSERT INTO accident_logs (device_id, accident_type, occurred_at) VALUES (?, ?, ?)',
+                [data.device_id, data.accident_type, data.occurred_at || timestamp], err => { if(err) console.error(err); });
         } else if (topic === 'elevator/arrival') {
-            // 到着ログの保存
-            db.query(
-                'INSERT INTO arrival_logs (device_id, floor_number, arrived_at) VALUES (?, ?, ?)',
-                [data.device_id, data.floor_number, data.arrived_at || timestamp],
-                (err) => { if (err) console.error('DB Insert Error (arrival):', err); }
-            );
+            db.query('INSERT INTO arrival_logs (device_id, floor_number, arrived_at) VALUES (?, ?, ?)',
+                [data.device_id, data.floor_number, data.arrived_at || timestamp], err => { if(err) console.error(err); });
         }
-    } catch (e) {
-        console.error('MQTT message parse error:', e);
-    }
+    } catch (e) { console.error(e); }
 });
 
-
-// ---------------------------------------------------
-// エレベーター位置情報 シミュレーション (ブロードキャスト版)
-// ---------------------------------------------------
-
+// --- Simulation ---
 let currentFloor = 1;
-let direction = 1; // 1: 上昇, -1: 下降
-const maxFloor = 3; 
-
-function startElevatorSimulation() {
-    console.log("エレベーターシミュレーション開始 (Broadcast Mode)");
-    scheduleNextMove();
-}
-
+let direction = 1;
+const maxFloor = 3;
+function startElevatorSimulation() { scheduleNextMove(); }
 function scheduleNextMove() {
-    // 5秒(5000ms) ～ 10秒(10000ms) のランダムな待機時間
     const delay = Math.floor(Math.random() * (10000 - 5000 + 1)) + 5000;
-
-    setTimeout(() => {
-        moveElevator();
-        scheduleNextMove(); // 再帰呼び出しでループ
-    }, delay);
+    setTimeout(() => { moveElevator(); scheduleNextMove(); }, delay);
 }
-
 function moveElevator() {
-    // 1 -> 2 -> 3 -> 2 -> 1 の順で移動
-    if (direction === 1) {
-        if (currentFloor >= maxFloor) {
-            direction = -1;
-            currentFloor--;
-        } else {
-            currentFloor++;
-        }
-    } else {
-        if (currentFloor <= 1) {
-            direction = 1;
-            currentFloor++;
-        } else {
-            currentFloor--;
-        }
-    }
-
-    // ブロードキャスト用トピックへ送信
-    const topic = 'elevator/broadcast/floor';
-    
-    const payload = JSON.stringify({
-        type: 'floor_update',
-        floor: currentFloor,
-        timestamp: new Date()
-    });
-
-    mqttClient.publish(topic, payload);
-    console.log(`[SIMULATION] Broadcasted: Floor ${currentFloor} -> Topic: ${topic}`);
+    if (direction === 1) { currentFloor >= maxFloor ? (direction = -1, currentFloor--) : currentFloor++; }
+    else { currentFloor <= 1 ? (direction = 1, currentFloor++) : currentFloor--; }
+    mqttClient.publish('elevator/broadcast/floor', JSON.stringify({ type: 'floor_update', floor: currentFloor, timestamp: new Date() }));
+    console.log(`[SIM] Floor: ${currentFloor}`);
 }
 
-
-// サーバー起動
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+app.listen(port, () => console.log(`Server running on port ${port}`));
