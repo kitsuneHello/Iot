@@ -19,12 +19,33 @@
         body { font-family: 'Segoe UI', 'Meiryo', sans-serif; margin: 0; background: var(--main-bg); color: #222; }
         h1 { margin: 0 0 24px 0; padding: 32px 0 16px 0; text-align: center; background: linear-gradient(90deg, var(--accent-light) 0%, #fff 100%); color: var(--accent); font-size: 2.2rem; letter-spacing: 2px; box-shadow: var(--shadow); }
         h2 { margin-top: 40px; color: var(--accent); font-size: 1.4rem; border-left: 6px solid var(--accent); padding-left: 12px; margin-left: 20px; }
-        h4 { color: #333; margin: 10px 0; text-align: center; }
+        h4 { color: #333; margin: 0 0 10px 0; text-align: center; flex-shrink: 0; /* タイトルが縮まないように */ }
+        
         .chart-section { padding: 0 20px; }
         .chart-row { display: flex; gap: 20px; margin-bottom: 20px; justify-content: center; flex-wrap: wrap; }
-        .chart-container { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px; border: 1px solid var(--border); width: 450px; height: 300px; position: relative; }
+        
+        /* コンテナをFlexbox化して、中身をきれいに配置 */
+        .chart-container { 
+            background: var(--card-bg); 
+            border-radius: var(--radius); 
+            box-shadow: var(--shadow); 
+            padding: 15px; 
+            border: 1px solid var(--border); 
+            width: 450px; 
+            height: 300px; 
+            display: flex;           /* 追加 */
+            flex-direction: column;  /* 追加 */
+        }
         .chart-row-2 .chart-container { width: 380px; height: 280px; }
-        canvas { width: 100% !important; height: calc(100% - 40px) !important; }
+
+        /* キャンバスを囲むラッパー（これが残りスペースを埋める） */
+        .canvas-wrapper {
+            flex: 1;              /* 残りの高さを全て使う */
+            position: relative;   /* Chart.jsのリサイズに必須 */
+            width: 100%;
+            min-height: 0;        /* Flexアイテムのはみ出し防止 */
+        }
+
         .realtime { display: flex; gap: 32px; margin: 20px; flex-wrap: wrap; }
         .realtime>div { flex: 1; min-width: 320px; background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; border: 1px solid var(--border); }
         table { border-collapse: separate; border-spacing: 0; width: 100%; background: #fff; border-radius: var(--radius); overflow: hidden; }
@@ -33,18 +54,13 @@
         .scrollable-table { max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
         .no-data { padding: 30px; text-align: center; color: #888; background: #fafafa; font-style: italic; }
         
-        /* ボタン群のスタイル */
         .btn-group { margin: 0 0 20px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
         .btn-label { font-size: 0.9rem; font-weight: bold; color: #555; margin-right: 5px; }
         .download-btn { color: #fff; border: none; border-radius: var(--radius); padding: 8px 16px; cursor: pointer; transition: 0.2s; font-size: 0.9rem;}
         .download-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        
-        /* 通常ダウンロード用 (平均値) */
         .btn-cong { background: #1976d2; }
         .btn-env { background: #2e7d32; }
         .btn-acc { background: #e65100; }
-        
-        /* 生データダウンロード用 (Raw) - 少し色味を変える */
         .btn-raw-cong { background: #5c6bc0; border: 2px solid #1976d2; }
         .btn-raw-env { background: #66bb6a; border: 2px solid #2e7d32; }
 
@@ -91,7 +107,6 @@
         <button class="download-btn btn-env" onclick="downloadCSV('environment', false)">環境データ</button>
         <button class="download-btn btn-acc" onclick="downloadCSV('accident', false)">事故情報</button>
     </div>
-    
     <div class="btn-group">
         <span class="btn-label">生データ (未加工):</span>
         <button class="download-btn btn-raw-cong" onclick="downloadCSV('congestion', true)">混雑度 (Raw)</button>
@@ -100,13 +115,38 @@
 
     <div class="chart-section">
         <div class="chart-row">
-            <div class="chart-container"><h4>混雑度</h4><canvas id="congestionChart"></canvas></div>
-            <div class="chart-container"><h4>事故情報</h4><canvas id="accidentChart"></canvas></div>
+            <div class="chart-container">
+                <h4>混雑度</h4>
+                <div class="canvas-wrapper">
+                    <canvas id="congestionChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h4>事故情報</h4>
+                <div class="canvas-wrapper">
+                    <canvas id="accidentChart"></canvas>
+                </div>
+            </div>
         </div>
         <div class="chart-row chart-row-2">
-            <div class="chart-container"><h4>気圧</h4><canvas id="pressureChart"></canvas></div>
-            <div class="chart-container"><h4>温度</h4><canvas id="tempChart"></canvas></div>
-            <div class="chart-container"><h4>湿度</h4><canvas id="humChart"></canvas></div>
+            <div class="chart-container">
+                <h4>気圧</h4>
+                <div class="canvas-wrapper">
+                    <canvas id="pressureChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h4>温度</h4>
+                <div class="canvas-wrapper">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h4>湿度</h4>
+                <div class="canvas-wrapper">
+                    <canvas id="humChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -148,19 +188,16 @@
         } catch(e) { console.error(e); }
     }
 
-    // グラフ表示用の保持データ（平均化済み）
     let currentHistoryData = [];
 
     async function fetchHistory() {
         const range = document.getElementById('rangeSelect').value;
         const date = document.getElementById('dateInput').value;
-        
         try {
-            const res = await fetch(`/api/history?range=${range}&date=${date}`); // raw=false (デフォルト)
+            const res = await fetch(`/api/history?range=${range}&date=${date}`);
             const result = await res.json();
             const data = result.data || [];
             currentHistoryData = data; 
-
             const congData = data.filter(r => r.rec_type === 'CONGESTION');
             const envData = data.filter(r => r.rec_type === 'ENVIRONMENT');
             const accData = data.filter(r => r.rec_type === 'ACCIDENT');
@@ -178,7 +215,6 @@
             else accCont.innerHTML = `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead><tbody>${accData.map(r=>`<tr><td>${r.device_id}</td><td>${r.accident_type}</td><td>${fmtDate(r.occurred_at)}</td></tr>`).join('')}</tbody></table>`;
 
             updateCharts(congData, envData, accData);
-
         } catch(e) { console.error("History fetch error", e); }
     }
 
@@ -203,67 +239,43 @@
         accidentChart.update();
     }
 
-    // ★★★ CSVダウンロード機能 (Raw対応) ★★★
     async function downloadCSV(type, isRaw) {
         const range = document.getElementById('rangeSelect').value;
         const date = document.getElementById('dateInput').value;
         let sourceData = [];
         let fileNamePrefix = isRaw ? 'raw_' : '';
 
-        // isRaw=true の場合は、APIから生データを改めて取得する
         if (isRaw) {
             try {
                 const res = await fetch(`/api/history?range=${range}&date=${date}&raw=true`);
                 const result = await res.json();
                 sourceData = result.data || [];
-            } catch(e) { 
-                alert("生データの取得に失敗しました");
-                return;
-            }
+            } catch(e) { alert("生データの取得に失敗しました"); return; }
         } else {
-            // isRaw=false (平均) の場合は、既にグラフ表示用に持っているデータを使う
             sourceData = currentHistoryData;
         }
 
-        if (!sourceData || sourceData.length === 0) {
-            alert("ダウンロードするデータがありません");
-            return;
-        }
-
-        let csv = '';
-        let fileName = '';
-        let filteredData = [];
+        if (!sourceData || sourceData.length === 0) { alert("ダウンロードするデータがありません"); return; }
+        let csv = '', fileName = '', filteredData = [];
 
         if (type === 'congestion') {
             fileName = `${fileNamePrefix}congestion_log.csv`;
             filteredData = sourceData.filter(d => d.rec_type === 'CONGESTION');
             csv = '時刻,デバイスID,階数,混雑度\n';
-            csv += filteredData.map(r => 
-                `${fmtDate(r.measured_at)},${r.device_id},${r.floor_number},${Number(r.congestion_level).toFixed(2)}`
-            ).join('\n');
-
+            csv += filteredData.map(r => `${fmtDate(r.measured_at)},${r.device_id},${r.floor_number},${Number(r.congestion_level).toFixed(2)}`).join('\n');
         } else if (type === 'environment') {
             fileName = `${fileNamePrefix}environment_log.csv`;
             filteredData = sourceData.filter(d => d.rec_type === 'ENVIRONMENT');
             csv = '時刻,デバイスID,気圧,温度,湿度\n';
-            csv += filteredData.map(r => 
-                `${fmtDate(r.measured_at)},${r.device_id},${Number(r.pressure).toFixed(1)},${Number(r.temperature).toFixed(1)},${Number(r.humidity).toFixed(1)}`
-            ).join('\n');
-
+            csv += filteredData.map(r => `${fmtDate(r.measured_at)},${r.device_id},${Number(r.pressure).toFixed(1)},${Number(r.temperature).toFixed(1)},${Number(r.humidity).toFixed(1)}`).join('\n');
         } else if (type === 'accident') {
-            fileName = 'accident_log.csv'; // 事故にRaw/Avgの区別はない
+            fileName = 'accident_log.csv';
             filteredData = sourceData.filter(d => d.rec_type === 'ACCIDENT');
             csv = '発生時刻,デバイスID,事故種別\n';
-            csv += filteredData.map(r => 
-                `${fmtDate(r.occurred_at)},${r.device_id},${r.accident_type}`
-            ).join('\n');
+            csv += filteredData.map(r => `${fmtDate(r.occurred_at)},${r.device_id},${r.accident_type}`).join('\n');
         }
 
-        if (filteredData.length === 0) {
-            alert("指定された期間に該当するデータがありません");
-            return;
-        }
-
+        if (filteredData.length === 0) { alert("指定された期間に該当するデータがありません"); return; }
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
         const blob = new Blob([bom, csv], { type: 'text/csv' });
         const a = document.createElement('a');
