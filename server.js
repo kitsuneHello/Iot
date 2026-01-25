@@ -57,89 +57,117 @@ app.get('/api/environment/latest', (req, res) => {
     });
 });
 
-// ★★★ 履歴取得API（ここを修正） ★★★
+// ★★★ 履歴取得API（平均化 or 生データ） ★★★
 app.get('/api/history', (req, res) => {
-    let { range, date } = req.query;
+    let { range, date, raw } = req.query; // rawパラメータを追加
     let where = '';
     let accidentWhere = '';
     let params = [];
-    let groupBy = '';
-    let selectTime = '';
-    let envGroupBy = '';
-    let envSelectTime = '';
-
-    // フィルタ条件構築
+    
+    // --- 共通: 期間フィルタの作成 ---
+    // 生データでも平均データでも「いつのデータか」という条件は同じなので共通化
     if (range && date) {
         if (range === 'day') {
             where = 'WHERE DATE(measured_at) = ?';
             accidentWhere = 'WHERE DATE(occurred_at) = ?';
             params.push(date);
+        } else if (range === 'week') {
+            where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
+            accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)';
+            params.push(date);
+        } else if (range === 'month') {
+            where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
+            params.push(date);
+        }
+    }
+
+    let unionSql = '';
+
+    if (raw === 'true') {
+        // ★ 生データ取得モード (GROUP BY なし, AVG なし)
+        // 1. 混雑度 (Raw)
+        const congestionSql = `(SELECT 
+                'CONGESTION' as rec_type,
+                d.floor_number, c.device_id, c.congestion_level, c.measured_at, 
+                NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at
+            FROM congestion_logs c
+            JOIN devices d ON c.device_id = d.device_id
+            ${where})`;
+
+        // 2. 環境 (Raw)
+        const envSql = `(SELECT 
+                'ENVIRONMENT' as rec_type,
+                NULL AS floor_number, e.device_id, NULL AS congestion_level, e.measured_at, 
+                e.pressure, e.temperature, e.humidity, NULL AS accident_type, NULL AS occurred_at
+            FROM environment_logs e
+            ${where})`;
+        
+        // 3. 事故 (Raw) ※事故は元々平均化しないので同じだが整合性のため含める
+        const accidentSql = `(SELECT 
+                'ACCIDENT' as rec_type,
+                NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, 
+                NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
+            FROM accident_logs a
+            ${accidentWhere})`;
+
+        unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql} ORDER BY measured_at DESC, occurred_at DESC`;
+
+    } else {
+        // ★ グラフ用・平均データ取得モード (GROUP BY あり, AVG あり)
+        let groupBy = '', selectTime = '', envGroupBy = '', envSelectTime = '';
+
+        if (range === 'day') {
             groupBy = 'c.device_id, c.measured_at';
             selectTime = 'c.measured_at AS measured_at';
             envGroupBy = 'e.device_id, e.measured_at';
             envSelectTime = 'e.measured_at';
         } else if (range === 'week') {
-            where = 'WHERE YEARWEEK(measured_at, 1) = YEARWEEK(?, 1)';
-            accidentWhere = 'WHERE YEARWEEK(occurred_at, 1) = YEARWEEK(?, 1)';
-            params.push(date);
             groupBy = `c.device_id, DATE(c.measured_at), HOUR(c.measured_at), FLOOR(MINUTE(c.measured_at)/5)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at), HOUR(e.measured_at), FLOOR(MINUTE(e.measured_at)/5)`;
             envSelectTime = `MIN(e.measured_at)`;
         } else if (range === 'month') {
-            where = 'WHERE DATE_FORMAT(measured_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            accidentWhere = 'WHERE DATE_FORMAT(occurred_at, "%Y-%m") = DATE_FORMAT(?, "%Y-%m")';
-            params.push(date);
             groupBy = `c.device_id, DATE(c.measured_at), HOUR(c.measured_at)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at), HOUR(e.measured_at)`;
             envSelectTime = `MIN(e.measured_at)`;
-        } else if (range === 'all') {
-            where = '';
-            accidentWhere = '';
+        } else {
+            // all or default
             groupBy = `c.device_id, DATE(c.measured_at)`;
             selectTime = `MIN(c.measured_at) AS measured_at`;
             envGroupBy = `e.device_id, DATE(e.measured_at)`;
             envSelectTime = `MIN(e.measured_at)`;
         }
-    } else {
-        groupBy = 'c.device_id, c.measured_at';
-        selectTime = 'c.measured_at AS measured_at';
-        envGroupBy = 'e.device_id, e.measured_at';
-        envSelectTime = 'e.measured_at';
+
+        const congestionSql = `(SELECT 
+                'CONGESTION' as rec_type,
+                d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, ${selectTime}, 
+                NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at
+            FROM congestion_logs c
+            JOIN devices d ON c.device_id = d.device_id
+            ${where}
+            GROUP BY ${groupBy})`;
+
+        const envSql = `(SELECT 
+                'ENVIRONMENT' as rec_type,
+                NULL AS floor_number, e.device_id, NULL AS congestion_level, ${envSelectTime} AS measured_at, 
+                AVG(e.pressure) AS pressure, AVG(e.temperature) AS temperature, AVG(e.humidity) AS humidity, NULL AS accident_type, NULL AS occurred_at
+            FROM environment_logs e
+            ${where}
+            GROUP BY ${envGroupBy})`;
+
+        const accidentSql = `(SELECT 
+                'ACCIDENT' as rec_type,
+                NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, 
+                NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
+            FROM accident_logs a
+            ${accidentWhere})`;
+
+        unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql} ORDER BY measured_at DESC, occurred_at DESC`;
     }
 
-    // ★ SQL修正: 'rec_type' カラムを追加し、フロントエンドで判別可能にする
-    
-    // 1. 混雑度
-    const congestionSql = `(SELECT 
-            'CONGESTION' as rec_type,
-            d.floor_number, c.device_id, AVG(c.congestion_level) AS congestion_level, ${selectTime}, 
-            NULL AS pressure, NULL AS temperature, NULL AS humidity, NULL AS accident_type, NULL AS occurred_at
-        FROM congestion_logs c
-        JOIN devices d ON c.device_id = d.device_id
-        ${where}
-        GROUP BY ${groupBy})`;
-
-    // 2. 環境
-    const envSql = `(SELECT 
-            'ENVIRONMENT' as rec_type,
-            NULL AS floor_number, e.device_id, NULL AS congestion_level, ${envSelectTime} AS measured_at, 
-            AVG(e.pressure) AS pressure, AVG(e.temperature) AS temperature, AVG(e.humidity) AS humidity, NULL AS accident_type, NULL AS occurred_at
-        FROM environment_logs e
-        ${where}
-        GROUP BY ${envGroupBy})`;
-
-    // 3. 事故
-    const accidentSql = `(SELECT 
-            'ACCIDENT' as rec_type,
-            NULL AS floor_number, a.device_id, NULL AS congestion_level, NULL AS measured_at, 
-            NULL AS pressure, NULL AS temperature, NULL AS humidity, a.accident_type, a.occurred_at
-        FROM accident_logs a
-        ${accidentWhere})`;
-
-    const unionSql = `${congestionSql} UNION ALL ${envSql} UNION ALL ${accidentSql} ORDER BY measured_at DESC, occurred_at DESC`;
-    
+    // パラメータは3つのクエリで同じものを使うため3回繰り返す
     db.query(unionSql, [...params, ...params, ...params], (err, results) => {
         if (err) return res.status(500).send('DB Error');
         res.json({ data: results });

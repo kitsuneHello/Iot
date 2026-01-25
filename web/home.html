@@ -34,13 +34,19 @@
         .no-data { padding: 30px; text-align: center; color: #888; background: #fafafa; font-style: italic; }
         
         /* ボタン群のスタイル */
-        .btn-group { margin: 0 0 20px 20px; display: flex; gap: 10px; }
-        .download-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 10px 20px; cursor: pointer; transition: 0.2s; }
+        .btn-group { margin: 0 0 20px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .btn-label { font-size: 0.9rem; font-weight: bold; color: #555; margin-right: 5px; }
+        .download-btn { color: #fff; border: none; border-radius: var(--radius); padding: 8px 16px; cursor: pointer; transition: 0.2s; font-size: 0.9rem;}
         .download-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        /* 色分け */
+        
+        /* 通常ダウンロード用 (平均値) */
         .btn-cong { background: #1976d2; }
         .btn-env { background: #2e7d32; }
         .btn-acc { background: #e65100; }
+        
+        /* 生データダウンロード用 (Raw) - 少し色味を変える */
+        .btn-raw-cong { background: #5c6bc0; border: 2px solid #1976d2; }
+        .btn-raw-env { background: #66bb6a; border: 2px solid #2e7d32; }
 
         #tableArea { margin: 20px; padding: 20px; background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
         select, input[type="date"] { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin: 0 10px; }
@@ -67,12 +73,6 @@
 
     <h2>過去データ</h2>
     
-    <div class="btn-group">
-        <button class="download-btn btn-cong" onclick="downloadCSV('congestion')">混雑度CSV</button>
-        <button class="download-btn btn-env" onclick="downloadCSV('environment')">環境データCSV</button>
-        <button class="download-btn btn-acc" onclick="downloadCSV('accident')">事故情報CSV</button>
-    </div>
-    
     <div style="margin-left: 20px; margin-bottom: 20px;">
         <label>表示範囲:
             <select id="rangeSelect" onchange="fetchHistory()">
@@ -83,6 +83,19 @@
             </select>
             <input type="date" id="dateInput" onchange="fetchHistory()">
         </label>
+    </div>
+
+    <div class="btn-group">
+        <span class="btn-label">平均データ (グラフ用):</span>
+        <button class="download-btn btn-cong" onclick="downloadCSV('congestion', false)">混雑度</button>
+        <button class="download-btn btn-env" onclick="downloadCSV('environment', false)">環境データ</button>
+        <button class="download-btn btn-acc" onclick="downloadCSV('accident', false)">事故情報</button>
+    </div>
+    
+    <div class="btn-group">
+        <span class="btn-label">生データ (未加工):</span>
+        <button class="download-btn btn-raw-cong" onclick="downloadCSV('congestion', true)">混雑度 (Raw)</button>
+        <button class="download-btn btn-raw-env" onclick="downloadCSV('environment', true)">環境データ (Raw)</button>
     </div>
 
     <div class="chart-section">
@@ -98,7 +111,7 @@
     </div>
 
     <div id="tableArea">
-        <h4>履歴テーブル</h4>
+        <h4>履歴テーブル (平均値)</h4>
         <div id="congestionTableContainer" class="scrollable-table" style="margin-bottom:20px;"></div>
         <div id="environmentTableContainer" class="scrollable-table" style="margin-bottom:20px;"></div>
         <div id="accidentTableContainer" class="scrollable-table"></div>
@@ -135,7 +148,7 @@
         } catch(e) { console.error(e); }
     }
 
-    // 履歴データ保持用（CSV出力で再利用）
+    // グラフ表示用の保持データ（平均化済み）
     let currentHistoryData = [];
 
     async function fetchHistory() {
@@ -143,39 +156,33 @@
         const date = document.getElementById('dateInput').value;
         
         try {
-            const res = await fetch(`/api/history?range=${range}&date=${date}`);
+            const res = await fetch(`/api/history?range=${range}&date=${date}`); // raw=false (デフォルト)
             const result = await res.json();
             const data = result.data || [];
-            currentHistoryData = data; // グローバル変数に保存
+            currentHistoryData = data; 
 
-            // サーバー側で rec_type を付けたので、それでフィルタリングする
             const congData = data.filter(r => r.rec_type === 'CONGESTION');
             const envData = data.filter(r => r.rec_type === 'ENVIRONMENT');
             const accData = data.filter(r => r.rec_type === 'ACCIDENT');
 
-            // 1. 混雑度テーブル
             const congCont = document.getElementById('congestionTableContainer');
             if(congData.length===0) congCont.innerHTML = '<div class="no-data">データなし</div>';
-            else congCont.innerHTML = `<table><thead><tr><th>階/デバイス</th><th>混雑度</th><th>時刻</th></tr></thead><tbody>${congData.map(r=>`<tr><td>${r.floor_number?r.floor_number+'階':r.device_id}</td><td>${Number(r.congestion_level).toFixed(2)}</td><td>${fmtDate(r.measured_at)}</td></tr>`).join('')}</tbody></table>`;
+            else congCont.innerHTML = `<table><thead><tr><th>階/デバイス</th><th>混雑度 (平均)</th><th>時刻</th></tr></thead><tbody>${congData.map(r=>`<tr><td>${r.floor_number?r.floor_number+'階':r.device_id}</td><td>${Number(r.congestion_level).toFixed(2)}</td><td>${fmtDate(r.measured_at)}</td></tr>`).join('')}</tbody></table>`;
 
-            // 2. 環境テーブル
             const envCont = document.getElementById('environmentTableContainer');
             if(envData.length===0) envCont.innerHTML = '<div class="no-data">データなし</div>';
-            else envCont.innerHTML = `<table><thead><tr><th>デバイス</th><th>気圧</th><th>温度</th><th>湿度</th><th>時刻</th></tr></thead><tbody>${envData.map(r=>`<tr><td>${r.device_id}</td><td>${Number(r.pressure).toFixed(1)}</td><td>${Number(r.temperature).toFixed(1)}</td><td>${Number(r.humidity).toFixed(1)}</td><td>${fmtDate(r.measured_at)}</td></tr>`).join('')}</tbody></table>`;
+            else envCont.innerHTML = `<table><thead><tr><th>デバイス</th><th>気圧 (平均)</th><th>温度 (平均)</th><th>湿度 (平均)</th><th>時刻</th></tr></thead><tbody>${envData.map(r=>`<tr><td>${r.device_id}</td><td>${Number(r.pressure).toFixed(1)}</td><td>${Number(r.temperature).toFixed(1)}</td><td>${Number(r.humidity).toFixed(1)}</td><td>${fmtDate(r.measured_at)}</td></tr>`).join('')}</tbody></table>`;
 
-            // 3. 事故テーブル
             const accCont = document.getElementById('accidentTableContainer');
             if(accData.length===0) accCont.innerHTML = '<div class="no-data">データなし</div>';
             else accCont.innerHTML = `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead><tbody>${accData.map(r=>`<tr><td>${r.device_id}</td><td>${r.accident_type}</td><td>${fmtDate(r.occurred_at)}</td></tr>`).join('')}</tbody></table>`;
 
-            // グラフ更新
             updateCharts(congData, envData, accData);
 
         } catch(e) { console.error("History fetch error", e); }
     }
 
     function updateCharts(congData, envData, accData) {
-        // 混雑度グラフ
         const groups = {};
         congData.forEach(r => {
             const k = r.floor_number !== undefined ? `階 ${r.floor_number}` : (r.device_id || 'unknown');
@@ -187,21 +194,39 @@
         }));
         congestionChart.update();
 
-        // 環境グラフ
         pressureChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.pressure }));
         tempChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.temperature }));
         humChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.humidity }));
         [pressureChart, tempChart, humChart].forEach(c => c.update());
 
-        // 事故グラフ
         accidentChart.data.datasets[0].data = accData.map(r => ({ x: toISO(r.occurred_at), y: 1 }));
         accidentChart.update();
     }
 
-    // ★★★ CSV分割ダウンロード機能 ★★★
-    function downloadCSV(type) {
-        if (!currentHistoryData || currentHistoryData.length === 0) {
-            alert("データがありません");
+    // ★★★ CSVダウンロード機能 (Raw対応) ★★★
+    async function downloadCSV(type, isRaw) {
+        const range = document.getElementById('rangeSelect').value;
+        const date = document.getElementById('dateInput').value;
+        let sourceData = [];
+        let fileNamePrefix = isRaw ? 'raw_' : '';
+
+        // isRaw=true の場合は、APIから生データを改めて取得する
+        if (isRaw) {
+            try {
+                const res = await fetch(`/api/history?range=${range}&date=${date}&raw=true`);
+                const result = await res.json();
+                sourceData = result.data || [];
+            } catch(e) { 
+                alert("生データの取得に失敗しました");
+                return;
+            }
+        } else {
+            // isRaw=false (平均) の場合は、既にグラフ表示用に持っているデータを使う
+            sourceData = currentHistoryData;
+        }
+
+        if (!sourceData || sourceData.length === 0) {
+            alert("ダウンロードするデータがありません");
             return;
         }
 
@@ -209,26 +234,25 @@
         let fileName = '';
         let filteredData = [];
 
-        // タイプごとのカラム定義とデータ抽出
         if (type === 'congestion') {
-            fileName = 'congestion_log.csv';
-            filteredData = currentHistoryData.filter(d => d.rec_type === 'CONGESTION');
+            fileName = `${fileNamePrefix}congestion_log.csv`;
+            filteredData = sourceData.filter(d => d.rec_type === 'CONGESTION');
             csv = '時刻,デバイスID,階数,混雑度\n';
             csv += filteredData.map(r => 
                 `${fmtDate(r.measured_at)},${r.device_id},${r.floor_number},${Number(r.congestion_level).toFixed(2)}`
             ).join('\n');
 
         } else if (type === 'environment') {
-            fileName = 'environment_log.csv';
-            filteredData = currentHistoryData.filter(d => d.rec_type === 'ENVIRONMENT');
+            fileName = `${fileNamePrefix}environment_log.csv`;
+            filteredData = sourceData.filter(d => d.rec_type === 'ENVIRONMENT');
             csv = '時刻,デバイスID,気圧,温度,湿度\n';
             csv += filteredData.map(r => 
                 `${fmtDate(r.measured_at)},${r.device_id},${Number(r.pressure).toFixed(1)},${Number(r.temperature).toFixed(1)},${Number(r.humidity).toFixed(1)}`
             ).join('\n');
 
         } else if (type === 'accident') {
-            fileName = 'accident_log.csv';
-            filteredData = currentHistoryData.filter(d => d.rec_type === 'ACCIDENT');
+            fileName = 'accident_log.csv'; // 事故にRaw/Avgの区別はない
+            filteredData = sourceData.filter(d => d.rec_type === 'ACCIDENT');
             csv = '発生時刻,デバイスID,事故種別\n';
             csv += filteredData.map(r => 
                 `${fmtDate(r.occurred_at)},${r.device_id},${r.accident_type}`
@@ -236,7 +260,7 @@
         }
 
         if (filteredData.length === 0) {
-            alert("指定されたデータがありません");
+            alert("指定された期間に該当するデータがありません");
             return;
         }
 
