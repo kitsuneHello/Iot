@@ -220,4 +220,57 @@ function moveElevator() {
     console.log(`[SIM] Floor: ${currentFloor}`);
 }
 
+// --- 混雑状況ブロードキャスト機能 ---
+
+// 混雑度(数値)をステータス(文字列)に変換する関数
+function getCongestionStatus(level) {
+    if (level < 30) return '空き';   // 0〜29
+    if (level < 70) return '普通';   // 30〜69
+    return '混雑';                   // 70〜100
+}
+
+// 全階層の最新混雑状況を取得してMQTT送信する関数
+function broadcastCongestion() {
+    // APIで使用しているのと同じ「各デバイスの最新データ」を取得するSQL
+    const sql = `
+        SELECT floor_number, congestion_level, measured_at
+        FROM (
+          SELECT d.floor_number, c.congestion_level, c.measured_at,
+            ROW_NUMBER() OVER (PARTITION BY c.device_id ORDER BY c.measured_at DESC) as rn
+          FROM congestion_logs c
+          JOIN devices d ON c.device_id = d.device_id
+          WHERE d.location_type = 'HALL'
+        ) t
+        WHERE t.rn = 1 ORDER BY floor_number ASC
+    `;
+
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error('Broadcast DB Error:', err.message);
+            return;
+        }
+
+        // データを整形（ステータス付与）
+        const broadcastData = results.map(row => ({
+            floor: row.floor_number,
+            level: row.congestion_level,
+            status: getCongestionStatus(row.congestion_level), // ここで「空き・普通・混雑」を入れる
+            timestamp: row.measured_at
+        }));
+
+        // MQTTへ送信
+        const payload = JSON.stringify({
+            type: 'congestion_all',
+            data: broadcastData
+        });
+
+        // トピック名: elevator/broadcast/congestion_all
+        mqttClient.publish('elevator/broadcast/congestion_all', payload);
+        console.log('[MQTT] Broadcasted congestion data');
+    });
+}
+
+// 5秒ごとに混雑状況をブロードキャスト（間隔は好みで調整）
+setInterval(broadcastCongestion, 5000);
+
 app.listen(port, () => console.log(`Server running on port ${port}`));
