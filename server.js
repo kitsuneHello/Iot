@@ -217,7 +217,6 @@ function moveElevator() {
     if (direction === 1) { currentFloor >= maxFloor ? (direction = -1, currentFloor--) : currentFloor++; }
     else { currentFloor <= 1 ? (direction = 1, currentFloor++) : currentFloor--; }
     mqttClient.publish('elevator/broadcast/floor', JSON.stringify({ type: 'floor_update', floor: currentFloor, timestamp: new Date() }));
-    console.log(`[SIM] Floor: ${currentFloor}`);
 }
 
 // --- 混雑状況ブロードキャスト機能 ---
@@ -266,7 +265,6 @@ function broadcastCongestion() {
 
         // トピック名: elevator/broadcast/congestion_all
         mqttClient.publish('elevator/broadcast/congestion_all', payload);
-        console.log('[MQTT] Broadcasted congestion data');
     });
 }
 
