@@ -7,7 +7,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
+        /* --- デザイン定義 --- */
         :root {
+            /* 色やサイズなどの変数を定義 */
             --main-bg: #f7f9fb;
             --card-bg: #fff;
             --accent: #1976d2;
@@ -21,6 +23,7 @@
         h2 { margin-top: 40px; color: var(--accent); font-size: 1.4rem; border-left: 6px solid var(--accent); padding-left: 12px; margin-left: 20px; }
         h4 { color: #333; margin: 0 0 10px 0; text-align: center; flex-shrink: 0; /* タイトルが縮まないように */ }
         
+        /* --- グラフエリアのレイアウト --- */
         .chart-section { padding: 0 20px; }
         .chart-row { display: flex; gap: 20px; margin-bottom: 20px; justify-content: center; flex-wrap: wrap; }
         
@@ -46,6 +49,7 @@
             min-height: 0;        /* Flexアイテムのはみ出し防止 */
         }
 
+        /* --- リアルタイムテーブルのレイアウト --- */
         .realtime { display: flex; gap: 32px; margin: 20px; flex-wrap: wrap; }
         .realtime>div { flex: 1; min-width: 320px; background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; border: 1px solid var(--border); }
         table { border-collapse: separate; border-spacing: 0; width: 100%; background: #fff; border-radius: var(--radius); overflow: hidden; }
@@ -54,6 +58,7 @@
         .scrollable-table { max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
         .no-data { padding: 30px; text-align: center; color: #888; background: #fafafa; font-style: italic; }
         
+        /* --- ボタングループ --- */
         .btn-group { margin: 0 0 20px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
         .btn-label { font-size: 0.9rem; font-weight: bold; color: #555; margin-right: 5px; }
         .download-btn { color: #fff; border: none; border-radius: var(--radius); padding: 8px 16px; cursor: pointer; transition: 0.2s; font-size: 0.9rem;}
@@ -158,12 +163,19 @@
     </div>
 
 <script>
+    // Chart.jsの共通オプション（レスポンシブ対応や時間軸設定）
     const commonOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time' } }, plugins: { legend: { position: 'top' } } };
+    
+    // ユーティリティ関数（日付フォーマットや色生成）
     function toISO(dt) { return dt ? dt.replace(' ', 'T') : dt; }
     function getColor(i) { return `hsl(${(i * 45) % 360} 75% 45%)`; }
     function fmtDate(dt) { return dt ? new Date(dt).toLocaleString('ja-JP') : '-'; }
+    
+    // チャートインスタンスの保持変数
     let congestionChart, pressureChart, tempChart, humChart, accidentChart;
 
+    // --- チャートの初期化 ---
+    // ページ読み込み時に空のグラフを作成する
     function initCharts() {
         const ctxCong = document.getElementById('congestionChart').getContext('2d');
         const ctxAcc = document.getElementById('accidentChart').getContext('2d');
@@ -177,6 +189,8 @@
         humChart = new Chart(ctxHum, { type: 'line', data: { datasets: [{ label: '湿度', borderColor: 'purple' }] }, options: commonOptions });
     }
 
+    // --- リアルタイムデータの取得 ---
+    // /api/congestion/latest 等からデータを取得し、上部のテーブルを更新する
     async function fetchRealtime() {
         try {
             const [cong, env] = await Promise.all([
@@ -190,6 +204,8 @@
 
     let currentHistoryData = [];
 
+    // --- 履歴データの取得 ---
+    // 選択された日付・範囲に基づいてAPIからデータを取得し、テーブルとグラフを更新する
     async function fetchHistory() {
         const range = document.getElementById('rangeSelect').value;
         const date = document.getElementById('dateInput').value;
@@ -198,10 +214,12 @@
             const result = await res.json();
             const data = result.data || [];
             currentHistoryData = data; 
+            // データの種類ごとにフィルタリング
             const congData = data.filter(r => r.rec_type === 'CONGESTION');
             const envData = data.filter(r => r.rec_type === 'ENVIRONMENT');
             const accData = data.filter(r => r.rec_type === 'ACCIDENT');
 
+            // テーブルDOMの構築
             const congCont = document.getElementById('congestionTableContainer');
             if(congData.length===0) congCont.innerHTML = '<div class="no-data">データなし</div>';
             else congCont.innerHTML = `<table><thead><tr><th>階/デバイス</th><th>混雑度 (平均)</th><th>時刻</th></tr></thead><tbody>${congData.map(r=>`<tr><td>${r.floor_number?r.floor_number+'階':r.device_id}</td><td>${Number(r.congestion_level).toFixed(2)}</td><td>${fmtDate(r.measured_at)}</td></tr>`).join('')}</tbody></table>`;
@@ -214,11 +232,15 @@
             if(accData.length===0) accCont.innerHTML = '<div class="no-data">データなし</div>';
             else accCont.innerHTML = `<table><thead><tr><th>デバイス</th><th>事故種別</th><th>発生時刻</th></tr></thead><tbody>${accData.map(r=>`<tr><td>${r.device_id}</td><td>${r.accident_type}</td><td>${fmtDate(r.occurred_at)}</td></tr>`).join('')}</tbody></table>`;
 
+            // グラフの更新関数を呼び出し
             updateCharts(congData, envData, accData);
         } catch(e) { console.error("History fetch error", e); }
     }
 
+    // --- グラフデータの更新 ---
+    // 取得した履歴データをChart.js用の形式に変換して描画する
     function updateCharts(congData, envData, accData) {
+        // 混雑度：デバイス/階ごとにグループ化して複数の線として描画
         const groups = {};
         congData.forEach(r => {
             const k = r.floor_number !== undefined ? `階 ${r.floor_number}` : (r.device_id || 'unknown');
@@ -230,21 +252,26 @@
         }));
         congestionChart.update();
 
+        // 環境データ：各グラフにデータをセット
         pressureChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.pressure }));
         tempChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.temperature }));
         humChart.data.datasets[0].data = envData.map(r => ({ x: toISO(r.measured_at), y: r.humidity }));
         [pressureChart, tempChart, humChart].forEach(c => c.update());
 
+        // 事故データ：散布図としてプロット
         accidentChart.data.datasets[0].data = accData.map(r => ({ x: toISO(r.occurred_at), y: 1 }));
         accidentChart.update();
     }
 
+    // --- CSVダウンロード処理 ---
+    // type: データの種類, isRaw: 生データかどうか
     async function downloadCSV(type, isRaw) {
         const range = document.getElementById('rangeSelect').value;
         const date = document.getElementById('dateInput').value;
         let sourceData = [];
         let fileNamePrefix = isRaw ? 'raw_' : '';
 
+        // 生データ要求の場合はサーバーから再取得、平均データの場合は表示中のデータを使用
         if (isRaw) {
             try {
                 const res = await fetch(`/api/history?range=${range}&date=${date}&raw=true`);
@@ -258,6 +285,7 @@
         if (!sourceData || sourceData.length === 0) { alert("ダウンロードするデータがありません"); return; }
         let csv = '', fileName = '', filteredData = [];
 
+        // データの種類に応じたCSVヘッダーと行の生成
         if (type === 'congestion') {
             fileName = `${fileNamePrefix}congestion_log.csv`;
             filteredData = sourceData.filter(d => d.rec_type === 'CONGESTION');
@@ -276,6 +304,8 @@
         }
 
         if (filteredData.length === 0) { alert("指定された期間に該当するデータがありません"); return; }
+        
+        // BOMを付加してExcelでの文字化けを防ぐ
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
         const blob = new Blob([bom, csv], { type: 'text/csv' });
         const a = document.createElement('a');
@@ -284,12 +314,18 @@
         a.click();
     }
 
+    // --- メイン処理開始 ---
     window.addEventListener('DOMContentLoaded', () => {
+        // デフォルトの日付を「今日」に設定
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('dateInput').value = today;
+        
+        // 初期化と初回データ取得
         initCharts();
         fetchRealtime();
         fetchHistory();
+        
+        // 10秒ごとの自動更新
         setInterval(() => { fetchRealtime(); fetchHistory(); }, 10000);
     });
 </script>
